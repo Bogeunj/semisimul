@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "proc2d"
+version = "0.1.0"
+description = "2D semiconductor process cross-section simulator (MVP)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "PyYAML>=6.0",
+  "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+gui = ["streamlit>=1.35"]
+
+[project.scripts]
+proc2d = "proc2d.cli:main"
+proc2d-gui = "proc2d.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["proc2d*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

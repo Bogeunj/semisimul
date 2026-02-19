@@ -1,0 +1,3 @@
+[console_scripts]
+proc2d = proc2d.cli:main
+proc2d-gui = proc2d.gui:main
