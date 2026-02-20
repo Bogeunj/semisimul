@@ -1,0 +1,76 @@
+domain:
+  Lx_um: 2.0
+  Ly_um: 0.5
+  Nx: 401
+  Ny: 201
+background_doping_cm3: 1.0e15
+
+steps:
+  - type: mask
+    openings_um:
+      - [0.8, 1.2]
+    sigma_lat_um: 0.03
+
+  - type: oxidation
+    model: deal_grove
+    time_s: 5.0
+    A_um: 0.1
+    B_um2_s: 0.01
+    gamma: 2.27
+    apply_on: all
+    consume_dopants: true
+    update_materials: true
+
+  - type: implant
+    dose_cm2: 1.0e13
+    Rp_um: 0.05
+    dRp_um: 0.02
+
+  - type: anneal
+    diffusivity:
+      model: arrhenius
+      D0_cm2_s: 1.0e-3
+      Ea_eV: 3.5
+      T_C: 1000.0
+    total_t_s: 10.0
+    dt_s: 0.5
+    oxide:
+      D_scale: 0.0
+    cap_eps_um: 0.001
+    top_bc:
+      open:
+        type: robin
+        h_cm_s: 1.0e-5
+        Ceq_cm3: 0.0
+      blocked:
+        type: neumann
+
+  - type: analyze
+    silicon_only: true
+    junctions:
+      - x_um: 1.0
+        threshold_cm3: 1.0e17
+    laterals:
+      - y_um: 0.05
+        threshold_cm3: 1.0e17
+    sheet_dose:
+      save_csv: true
+    save:
+      json: true
+      csv: true
+
+  - type: export
+    outdir: outputs/run_p2
+    formats: [npy, csv, png, vtk]
+    linecuts:
+      - kind: vertical
+        x_um: 1.0
+      - kind: horizontal
+        y_um: 0.05
+    plot:
+      log10: true
+      vmin: 1.0e14
+      vmax: 1.0e20
+    extra:
+      tox_csv: true
+      tox_png: true

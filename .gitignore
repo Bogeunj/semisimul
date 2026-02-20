@@ -3,11 +3,20 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 *.egg-info/
+
 # Virtual env
 .venv/
 venv/
+
 # Local outputs
 outputs/
 examples/outputs/
+*.npy
+*.vtk
+*.vtk.gz
+
+# Streamlit
+.streamlit/
+
 # Misc
 .DS_Store

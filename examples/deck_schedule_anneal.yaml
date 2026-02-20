@@ -1,0 +1,45 @@
+domain:
+  Lx_um: 2.0
+  Ly_um: 0.5
+  Nx: 401
+  Ny: 201
+background_doping_cm3: 1.0e15
+
+steps:
+  - type: mask
+    openings_um:
+      - [0.8, 1.2]
+    sigma_lat_um: 0.03
+
+  - type: implant
+    dose_cm2: 1.0e13
+    Rp_um: 0.05
+    dRp_um: 0.02
+
+  - type: anneal
+    dt_s: 0.25
+    diffusivity:
+      model: arrhenius
+      D0_cm2_s: 1.0e-3
+      Ea_eV: 3.5
+      schedule:
+        - t_s: 3.0
+          T_C: 900.0
+        - t_s: 2.0
+          T_C: 1000.0
+        - t_s: 1.0
+          T_C: 1050.0
+    total_t_s: 6.0
+    top_bc:
+      open:
+        type: neumann
+      blocked:
+        type: neumann
+
+  - type: export
+    outdir: outputs/run_schedule
+    formats: [npy, png]
+    plot:
+      log10: true
+      vmin: 1.0e14
+      vmax: 1.0e20
