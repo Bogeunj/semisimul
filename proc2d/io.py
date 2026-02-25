@@ -125,7 +125,7 @@ def save_heatmap_png(
     fig, ax = plt.subplots(figsize=(7.2, 3.6), dpi=150)
     im = ax.imshow(
         plot_arr,
-        extent=[float(grid.x_um[0]), float(grid.x_um[-1]), float(grid.y_um[-1]), float(grid.y_um[0])],
+        extent=(float(grid.x_um[0]), float(grid.x_um[-1]), float(grid.y_um[-1]), float(grid.y_um[0])),
         aspect="auto",
         origin="upper",
         cmap="inferno",

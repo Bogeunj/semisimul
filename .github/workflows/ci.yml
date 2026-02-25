@@ -27,4 +27,5 @@ jobs:
 
       - name: Run tests
         run: |
+          python -m proc2d selfcheck --no-smoke
           pytest -q

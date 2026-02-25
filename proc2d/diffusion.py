@@ -92,8 +92,38 @@ def _as_open_fraction(mask_eff: np.ndarray | None, nx: int) -> np.ndarray:
     return np.clip(arr, 0.0, 1.0)
 
 
+def top_open_fraction_with_cap(
+    mask_eff: np.ndarray | None,
+    tox_um: np.ndarray,
+    *,
+    cap_eps_um: float,
+    cap_model: str = "hard",
+    cap_len_um: float | None = None,
+) -> np.ndarray:
+    tox = np.asarray(tox_um, dtype=float)
+    if tox.ndim != 1:
+        raise ValueError("tox_um must be a 1D array.")
+    if np.any(tox < 0.0):
+        raise ValueError("tox_um must be non-negative.")
+
+    open_frac = _as_open_fraction(mask_eff, tox.shape[0])
+
+    model = str(cap_model).lower()
+    if model == "hard":
+        ensure_positive("cap_eps_um", float(cap_eps_um), allow_zero=True)
+        return open_frac * (tox <= float(cap_eps_um)).astype(float)
+
+    if model == "exp":
+        if cap_len_um is None:
+            raise ValueError("cap_len_um is required when cap_model='exp'.")
+        ensure_positive("cap_len_um", float(cap_len_um))
+        return open_frac * np.exp(-tox / float(cap_len_um))
+
+    raise ValueError(f"Unsupported cap_model '{cap_model}'. Use 'hard' or 'exp'.")
+
+
 def _as_D_field(D_cm2_s: float | np.ndarray, grid: Grid2D) -> np.ndarray:
-    if np.isscalar(D_cm2_s):
+    if isinstance(D_cm2_s, (int, float, np.floating)):
         D = float(D_cm2_s)
         ensure_positive("D_cm2_s", D, allow_zero=True)
         return np.full(grid.shape, D, dtype=float)

@@ -200,14 +200,110 @@ def lateral_extents_at_y(C: np.ndarray, grid: Grid2D, y_um: float, threshold_cm3
     }
 
 
-def iso_contour_area(C: np.ndarray, grid: Grid2D, threshold_cm3: float) -> float:
-    """Approximate area of region with ``C >= threshold`` in um^2.
+def _triangle_area(p0: tuple[float, float], p1: tuple[float, float], p2: tuple[float, float]) -> float:
+    return 0.5 * abs(
+        (p1[0] - p0[0]) * (p2[1] - p0[1])
+        - (p1[1] - p0[1]) * (p2[0] - p0[0])
+    )
 
-    Cell-counting approximation:
-    ``area_um2 = n_cells * dx_um * dy_um``
-    """
+
+def _edge_cross(
+    pa: tuple[float, float],
+    pb: tuple[float, float],
+    va: float,
+    vb: float,
+) -> tuple[float, float]:
+    if va == vb:
+        return pa
+    t = va / (va - vb)
+    t = min(max(t, 0.0), 1.0)
+    return (
+        pa[0] + t * (pb[0] - pa[0]),
+        pa[1] + t * (pb[1] - pa[1]),
+    )
+
+
+def _triangle_area_above_threshold(
+    p0: tuple[float, float],
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    v0: float,
+    v1: float,
+    v2: float,
+) -> float:
+    inside = [v0 >= 0.0, v1 >= 0.0, v2 >= 0.0]
+    n_in = int(sum(inside))
+    full = _triangle_area(p0, p1, p2)
+
+    if n_in == 0:
+        return 0.0
+    if n_in == 3:
+        return full
+
+    points = [p0, p1, p2]
+    vals = [v0, v1, v2]
+
+    if n_in == 1:
+        i_in = inside.index(True)
+        i_out_pair = [k for k in (0, 1, 2) if k != i_in]
+        p_in = points[i_in]
+        v_in = vals[i_in]
+        p_a = points[i_out_pair[0]]
+        v_a = vals[i_out_pair[0]]
+        p_b = points[i_out_pair[1]]
+        v_b = vals[i_out_pair[1]]
+        q_a = _edge_cross(p_in, p_a, v_in, v_a)
+        q_b = _edge_cross(p_in, p_b, v_in, v_b)
+        return _triangle_area(p_in, q_a, q_b)
+
+    i_out_idx = inside.index(False)
+    i_in_pair = [k for k in (0, 1, 2) if k != i_out_idx]
+    p_out = points[i_out_idx]
+    v_out = vals[i_out_idx]
+    p_a = points[i_in_pair[0]]
+    v_a = vals[i_in_pair[0]]
+    p_b = points[i_in_pair[1]]
+    v_b = vals[i_in_pair[1]]
+    q_a = _edge_cross(p_out, p_a, v_out, v_a)
+    q_b = _edge_cross(p_out, p_b, v_out, v_b)
+    return full - _triangle_area(p_out, q_a, q_b)
+
+
+def iso_contour_area(
+    C: np.ndarray,
+    grid: Grid2D,
+    threshold_cm3: float,
+    method: str = "cell_count",
+) -> float:
+    """Approximate area of region with ``C >= threshold`` in um^2."""
     arr = np.asarray(C, dtype=float)
     if arr.shape != grid.shape:
         raise ValueError(f"C shape must be {grid.shape}, got {arr.shape}.")
-    n_cells = int(np.count_nonzero(arr >= float(threshold_cm3)))
-    return float(n_cells * grid.dx_um * grid.dy_um)
+
+    method_l = str(method).lower()
+    th = float(threshold_cm3)
+
+    if method_l == "cell_count":
+        n_cells = int(np.count_nonzero(arr >= th))
+        return float(n_cells * grid.dx_um * grid.dy_um)
+
+    if method_l == "tri_linear":
+        dx = float(grid.dx_um)
+        dy = float(grid.dy_um)
+        p00 = (0.0, 0.0)
+        p10 = (dx, 0.0)
+        p11 = (dx, dy)
+        p01 = (0.0, dy)
+
+        area = 0.0
+        for j in range(grid.Ny - 1):
+            for i in range(grid.Nx - 1):
+                v00 = float(arr[j, i] - th)
+                v10 = float(arr[j, i + 1] - th)
+                v11 = float(arr[j + 1, i + 1] - th)
+                v01 = float(arr[j + 1, i] - th)
+                area += _triangle_area_above_threshold(p00, p10, p11, v00, v10, v11)
+                area += _triangle_area_above_threshold(p00, p11, p01, v00, v11, v01)
+        return float(area)
+
+    raise ValueError(f"Unsupported iso area method '{method}'.")

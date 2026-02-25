@@ -10,6 +10,7 @@ python3 -m pip install --user --break-system-packages -e ".[dev,gui]"
 
 echo
 echo "[proc2d] Install completed. Recommended checks:"
+echo "  python3 -m proc2d selfcheck"
 echo "  python3 -m pytest"
 echo "  python3 -m proc2d run examples/deck_basic.yaml --out outputs/run1"
 echo "  python3 -m streamlit run proc2d/gui_script.py --server.port 8502"
