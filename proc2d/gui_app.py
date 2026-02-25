@@ -15,23 +15,10 @@ import numpy as np
 import streamlit as st
 import yaml
 
-from .diffusion import TopBCConfig, anneal_implicit, anneal_implicit_with_history
+from .engine import run_deck_mapping
+from .gui_bridge import build_deck_from_ui
 from .grid import Grid2D
-from .implant import implant_2d_gaussian
-from .io import (
-    export_results,
-    save_history_csv,
-    save_history_png,
-    save_metrics_csv,
-    save_metrics_json,
-    save_sheet_dose_vs_x_csv,
-)
-from .mask import build_mask_1d, full_open_mask, openings_from_any, smooth_mask_1d, validate_mask
-from .metrics import junction_depth, lateral_extents_at_y, peak_info, sheet_dose_vs_x, total_mass
-from .oxidation import apply_oxidation, build_material_map
-
-KB_EV_K = 8.617333262145e-5
-
+from .mask import full_open_mask, openings_from_any
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -101,12 +88,17 @@ def load_default_params() -> dict[str, Any]:
         "oxidation_apply_on": "all",
         "oxidation_consume_dopants": True,
         "oxidation_update_materials": True,
+        "oxidation_mask_weighting": "binary",
+        "oxidation_open_threshold": 0.5,
         "anneal_use_arrhenius": False,
         "arrhenius_D0_cm2_s": 1.0e-3,
         "arrhenius_Ea_eV": 3.5,
         "arrhenius_T_C": 1000.0,
+        "anneal_schedule_text": "",
         "oxide_D_scale": 0.0,
         "cap_eps_um": 0.0,
+        "cap_model": "hard",
+        "cap_len_um": 0.01,
     }
 
     deck_path = _example_deck_path()
@@ -160,6 +152,12 @@ def load_default_params() -> dict[str, Any]:
         defaults["oxidation_update_materials"] = bool(
             oxidation_step.get("update_materials", defaults["oxidation_update_materials"])
         )
+        defaults["oxidation_mask_weighting"] = str(
+            oxidation_step.get("mask_weighting", defaults["oxidation_mask_weighting"])
+        )
+        defaults["oxidation_open_threshold"] = float(
+            oxidation_step.get("open_threshold", defaults["oxidation_open_threshold"])
+        )
 
     anneal_step = _first_step(steps, "anneal")
     if anneal_step:
@@ -175,12 +173,18 @@ def load_default_params() -> dict[str, Any]:
             defaults["arrhenius_Ea_eV"] = float(diff_cfg.get("Ea_eV", defaults["arrhenius_Ea_eV"]))
             if "T_C" in diff_cfg:
                 defaults["arrhenius_T_C"] = float(diff_cfg["T_C"])
+            schedule = diff_cfg.get("schedule")
+            if isinstance(schedule, list) and schedule:
+                defaults["anneal_schedule_text"] = yaml.safe_dump(schedule, sort_keys=False).strip()
 
         oxide_cfg = anneal_step.get("oxide", {})
         if isinstance(oxide_cfg, dict):
             defaults["oxide_D_scale"] = float(oxide_cfg.get("D_scale", defaults["oxide_D_scale"]))
 
         defaults["cap_eps_um"] = float(anneal_step.get("cap_eps_um", defaults["cap_eps_um"]))
+        defaults["cap_model"] = str(anneal_step.get("cap_model", defaults["cap_model"]))
+        if "cap_len_um" in anneal_step:
+            defaults["cap_len_um"] = float(anneal_step.get("cap_len_um", defaults["cap_len_um"]))
         top_bc = anneal_step.get("top_bc", {})
         if isinstance(top_bc, dict):
             open_cfg = top_bc.get("open", {})
@@ -239,24 +243,6 @@ def _parse_openings_text(openings_text: str) -> list[list[float]]:
     return openings_from_any(parsed)
 
 
-def _make_top_bc(params: dict[str, Any]) -> TopBCConfig:
-    open_type = str(params["top_open_type"]).lower()
-    if open_type == "robin":
-        return TopBCConfig(
-            open_type="robin",
-            blocked_type="neumann",
-            h_cm_s=float(params["h_cm_s"]),
-            Ceq_cm3=float(params["Ceq_cm3"]),
-        )
-    if open_type == "dirichlet":
-        return TopBCConfig(
-            open_type="dirichlet",
-            blocked_type="neumann",
-            dirichlet_value_cm3=float(params["dirichlet_value_cm3"]),
-        )
-    return TopBCConfig(open_type="neumann", blocked_type="neumann")
-
-
 def _mask_segments(mask_eff: np.ndarray, x_um: np.ndarray, threshold: float = 0.5) -> list[tuple[float, float]]:
     open_mask = np.asarray(mask_eff, dtype=float) >= float(threshold)
     segments: list[tuple[float, float]] = []
@@ -299,7 +285,7 @@ def _heatmap_figure(
     fig, ax = plt.subplots(figsize=(8.5, 4.0), dpi=140)
     im = ax.imshow(
         plot_arr,
-        extent=[float(grid.x_um[0]), float(grid.x_um[-1]), float(grid.y_um[-1]), float(grid.y_um[0])],
+        extent=(float(grid.x_um[0]), float(grid.x_um[-1]), float(grid.y_um[-1]), float(grid.y_um[0])),
         origin="upper",
         aspect="auto",
         cmap="inferno",
@@ -361,10 +347,16 @@ def _linecut_csv_text(
 
 def _history_figure(history: list[dict[str, float]]):
     def _safe_float(value: object) -> float:
-        if isinstance(value, (int, float, np.floating)):
+        if isinstance(value, (int, float)):
             return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return float("nan")
         try:
-            return float(str(value))
+            as_str = str(value)
+            return float(as_str)
         except Exception:
             return float("nan")
 
@@ -411,206 +403,80 @@ def _make_zip(paths: list[Path], outdir: Path, filename: str = "outputs_bundle.z
     return zip_path
 
 
-def _compute_metrics_report(C: np.ndarray, grid: Grid2D, x_ref_um: float, y_ref_um: float) -> dict[str, Any]:
-    report: dict[str, Any] = {
-        "total_mass_cm1": float(total_mass(C, grid)),
-        "peak": peak_info(C, grid),
-    }
-    junctions: list[dict[str, Any]] = []
-    for threshold in (1.0e17, 1.0e18):
-        depth = junction_depth(C, grid, x_um=float(x_ref_um), threshold_cm3=float(threshold))
-        junctions.append(
-            {
-                "x_um_requested": float(x_ref_um),
-                "threshold_cm3": float(threshold),
-                "depth_um": None if depth is None else float(depth),
-            }
-        )
-    report["junctions"] = junctions
-    report["lateral_at_y"] = lateral_extents_at_y(C, grid, y_um=float(y_ref_um), threshold_cm3=1.0e17)
-
-    sd = sheet_dose_vs_x(C, grid)
-    report["sheet_dose_summary"] = {
-        "min_cm2": float(np.min(sd)),
-        "max_cm2": float(np.max(sd)),
-        "mean_cm2": float(np.mean(sd)),
-    }
-    return report
-
-
 def run_simulation(params: dict[str, Any]) -> dict[str, Any]:
     """Run one simulation from GUI parameters."""
     t0 = time.perf_counter()
-
-    grid = Grid2D.from_domain(
-        Lx_um=float(params["Lx_um"]),
-        Ly_um=float(params["Ly_um"]),
-        Nx=int(params["Nx"]),
-        Ny=int(params["Ny"]),
-    )
-
-    C = np.full(grid.shape, float(params["background_doping_cm3"]), dtype=float)
-    tox_um = np.zeros(grid.Nx, dtype=float)
-    materials = build_material_map(grid, tox_um)
-
-    openings_um = params["openings_um"]
-    if openings_um:
-        mask_raw = build_mask_1d(grid.x_um, openings_um)
-        mask_eff = smooth_mask_1d(
-            mask_raw,
-            sigma_lat_um=float(params["sigma_lat_um"]),
-            dx_um=grid.dx_um,
-        )
-    else:
-        mask_eff = full_open_mask(grid.Nx)
-    validate_mask(mask_eff, grid.Nx)
-
-    if bool(params.get("oxidation_enable", False)):
-        C, tox_new, materials_new, _ = apply_oxidation(
-            C,
-            grid,
-            tox_um,
-            mask_eff,
-            time_s=float(params["oxidation_time_s"]),
-            A_um=float(params["oxidation_A_um"]),
-            B_um2_s=float(params["oxidation_B_um2_s"]),
-            gamma=float(params["oxidation_gamma"]),
-            apply_on=str(params["oxidation_apply_on"]),
-            consume_dopants=bool(params["oxidation_consume_dopants"]),
-        )
-        if np.any(tox_new > float(grid.Ly_um) + 1e-12):
-            raise ValueError("oxidation: tox exceeds domain Ly_um")
-        tox_um = tox_new
-        if bool(params.get("oxidation_update_materials", True)):
-            materials = materials_new
-
-    C += implant_2d_gaussian(
-        grid=grid,
-        dose_cm2=float(params["dose_cm2"]),
-        Rp_um=float(params["Rp_um"]),
-        dRp_um=float(params["dRp_um"]),
-        mask_eff=mask_eff,
-        tox_um=tox_um,
-    )
-
-    top_bc = _make_top_bc(params)
-    cap_eps_um = float(params.get("cap_eps_um", 0.0))
-    if cap_eps_um <= 0.0:
-        cap_eps_um = 0.5 * float(grid.dy_um)
-    bc_gate = (tox_um <= cap_eps_um).astype(float)
-    mask_eff_bc = np.asarray(mask_eff, dtype=float) * bc_gate
-
-    if bool(params.get("anneal_use_arrhenius", False)):
-        D0 = float(params["arrhenius_D0_cm2_s"])
-        Ea = float(params["arrhenius_Ea_eV"])
-        T_C = float(params["arrhenius_T_C"])
-        T_K = T_C + 273.15
-        if T_K <= 0.0:
-            raise ValueError("Arrhenius temperature must satisfy T_C > -273.15")
-        D_si = D0 * float(np.exp(-Ea / (KB_EV_K * T_K)))
-    else:
-        D_si = float(params["D_cm2_s"])
-
-    oxide_D_scale = float(params.get("oxide_D_scale", 0.0))
-    if oxide_D_scale < 0.0:
-        raise ValueError("oxide_D_scale must be >= 0")
-    D_field = np.full(grid.shape, D_si, dtype=float)
-    D_field[np.asarray(materials) == 1] *= oxide_D_scale
-
-    history: list[dict[str, float]] = []
-    if bool(params["record_history"]):
-        C, history = anneal_implicit_with_history(
-            C0=C,
-            grid=grid,
-            D_cm2_s=D_field,
-            total_t_s=float(params["total_t_s"]),
-            dt_s=float(params["dt_s"]),
-            top_bc=top_bc,
-            mask_eff=mask_eff_bc,
-            record_enable=True,
-            record_every_s=float(params["history_every_s"]),
-        )
-    else:
-        C = anneal_implicit(
-            C0=C,
-            grid=grid,
-            D_cm2_s=D_field,
-            total_t_s=float(params["total_t_s"]),
-            dt_s=float(params["dt_s"]),
-            top_bc=top_bc,
-            mask_eff=mask_eff_bc,
-        )
 
     outdir = Path(str(params["outdir"]))
     if not outdir.is_absolute():
         outdir = (Path.cwd() / outdir).resolve()
 
-    formats = [str(x).lower() for x in params["formats"]]
-    if bool(params["export_vtk"]) and "vtk" not in formats:
-        formats.append("vtk")
+    deck_payload = build_deck_from_ui(params, outdir=outdir)
+    run_result = run_deck_mapping(
+        deck_payload,
+        base_dir=Path.cwd(),
+        out_override=outdir,
+    )
+
+    state = run_result.state
+    grid = state.grid
+    C = np.asarray(state.C, dtype=float)
+    mask_eff = (
+        np.asarray(state.mask_eff, dtype=float)
+        if state.mask_eff is not None
+        else full_open_mask(grid.Nx)
+    )
+    mask_eff_bc = None
+    tox_um = (
+        np.asarray(state.tox_um, dtype=float)
+        if state.tox_um is not None
+        else np.zeros(grid.Nx, dtype=float)
+    )
+    materials = (
+        np.asarray(state.materials)
+        if state.materials is not None
+        else np.zeros(grid.shape, dtype=np.int8)
+    )
+
+    written = list(state.exports)
+    written_names = {Path(p).name for p in written}
     plot_cfg = {
         "log10": bool(params["plot_log10"]),
         "vmin": float(params["plot_vmin"]) if params["plot_vmin"] is not None else None,
         "vmax": float(params["plot_vmax"]) if params["plot_vmax"] is not None else None,
     }
-    linecuts = [
-        {"kind": "vertical", "x_um": float(params["linecut_x_um"])},
-        {"kind": "horizontal", "y_um": float(params["linecut_y_um"])},
-    ]
 
-    written = export_results(
-        C=C,
-        grid=grid,
-        outdir=outdir,
-        formats=formats,
-        linecuts=linecuts,
-        plot_cfg=plot_cfg,
-        tox_um=tox_um,
-        materials=materials,
-        extra={
-            "tox_csv": bool(params.get("export_tox_csv", False)),
-            "tox_png": bool(params.get("export_tox_png", False)),
-        },
+    metrics_report: dict[str, Any] | None = dict(state.metrics) if state.metrics is not None else None
+    history: list[dict[str, float]] = list(state.history)
+
+    metrics_json_file = outdir / "metrics.json"
+    metrics_json_path: Path | None = (
+        metrics_json_file if (metrics_json_file.exists() and "metrics.json" in written_names) else None
+    )
+    metrics_csv_file = outdir / "metrics.csv"
+    metrics_csv_path: Path | None = metrics_csv_file if (metrics_csv_file.exists() and "metrics.csv" in written_names) else None
+    sheet_dose_file = outdir / "sheet_dose_vs_x.csv"
+    sheet_dose_csv_path: Path | None = (
+        sheet_dose_file if (sheet_dose_file.exists() and "sheet_dose_vs_x.csv" in written_names) else None
     )
 
-    metrics_report: dict[str, Any] | None = None
-    metrics_json_path: Path | None = None
-    metrics_csv_path: Path | None = None
-    sheet_dose_csv_path: Path | None = None
-    if bool(params["compute_metrics"]):
-        metrics_report = _compute_metrics_report(
-            C,
-            grid,
-            x_ref_um=float(params["linecut_x_um"]),
-            y_ref_um=float(params["linecut_y_um"]),
-        )
-        metrics_json_path = save_metrics_json(metrics_report, outdir, filename="metrics.json")
-        metrics_csv_path = save_metrics_csv(metrics_report, outdir, filename="metrics.csv")
-        sd = sheet_dose_vs_x(C, grid)
-        sheet_dose_csv_path = save_sheet_dose_vs_x_csv(grid.x_um, sd, outdir, filename="sheet_dose_vs_x.csv")
-        written.extend([metrics_json_path, metrics_csv_path, sheet_dose_csv_path])
+    history_csv_file = outdir / "history.csv"
+    history_csv_path: Path | None = history_csv_file if (history_csv_file.exists() and "history.csv" in written_names) else None
+    history_png_file = outdir / "history.png"
+    history_png_path: Path | None = history_png_file if (history_png_file.exists() and "history.png" in written_names) else None
 
-    history_csv_path: Path | None = None
-    history_png_path: Path | None = None
-    if history and bool(params["history_save_csv"]):
-        history_csv_path = save_history_csv(history, outdir, filename="history.csv")
-        written.append(history_csv_path)
-    if history and bool(params["history_save_png"]):
-        history_png_path = save_history_png(history, outdir, filename="history.png")
-        written.append(history_png_path)
-
-    vtk_path = outdir / "C.vtk"
-    vtk_path = vtk_path if ("vtk" in formats and vtk_path.exists()) else None
-    material_vtk_path = outdir / "material.vtk"
-    material_vtk_path = material_vtk_path if material_vtk_path.exists() else None
-    tox_csv_path = outdir / "tox_vs_x.csv"
-    tox_csv_path = tox_csv_path if tox_csv_path.exists() else None
-    tox_png_path = outdir / "tox_vs_x.png"
-    tox_png_path = tox_png_path if tox_png_path.exists() else None
+    vtk_file = outdir / "C.vtk"
+    vtk_path: Path | None = vtk_file if vtk_file.exists() else None
+    material_vtk_file = outdir / "material.vtk"
+    material_vtk_path: Path | None = material_vtk_file if material_vtk_file.exists() else None
+    tox_csv_file = outdir / "tox_vs_x.csv"
+    tox_csv_path: Path | None = tox_csv_file if tox_csv_file.exists() else None
+    tox_png_file = outdir / "tox_vs_x.png"
+    tox_png_path: Path | None = tox_png_file if tox_png_file.exists() else None
 
     zip_path: Path | None = None
     if bool(params["zip_outputs"]):
-        dedup_written = []
+        dedup_written: list[Path] = []
         seen: set[str] = set()
         for p in written:
             key = str(p)
@@ -926,6 +792,24 @@ def run_gui() -> None:
                 value=bool(defaults["oxidation_update_materials"]),
                 disabled=not oxidation_enable,
             )
+            oxidation_weight_options = ["binary", "time_scale"]
+            default_oxidation_weighting = str(defaults["oxidation_mask_weighting"]).lower()
+            if default_oxidation_weighting not in oxidation_weight_options:
+                default_oxidation_weighting = "binary"
+            oxidation_mask_weighting = st.selectbox(
+                "oxidation.mask_weighting",
+                options=oxidation_weight_options,
+                index=oxidation_weight_options.index(default_oxidation_weighting),
+                disabled=not oxidation_enable,
+            )
+            oxidation_open_threshold = st.number_input(
+                "oxidation.open_threshold",
+                min_value=0.0,
+                max_value=1.0,
+                value=float(defaults["oxidation_open_threshold"]),
+                format="%.6g",
+                disabled=not oxidation_enable,
+            )
 
             st.subheader("Anneal")
             D_cm2_s = st.number_input("D_cm2_s", min_value=0.0, value=float(defaults["D_cm2_s"]), format="%.6g")
@@ -955,6 +839,13 @@ def run_gui() -> None:
                 format="%.6g",
                 disabled=not anneal_use_arrhenius,
             )
+            anneal_schedule_text = st.text_area(
+                "arrhenius.schedule (YAML, optional)",
+                value=str(defaults["anneal_schedule_text"]),
+                height=90,
+                disabled=not anneal_use_arrhenius,
+                help="예: - {t_s: 3.0, T_C: 900.0}",
+            )
             oxide_D_scale = st.number_input(
                 "anneal.oxide.D_scale",
                 min_value=0.0,
@@ -966,6 +857,22 @@ def run_gui() -> None:
                 min_value=0.0,
                 value=float(defaults["cap_eps_um"]),
                 format="%.6g",
+            )
+            cap_model_options = ["hard", "exp"]
+            default_cap_model = str(defaults["cap_model"]).lower()
+            if default_cap_model not in cap_model_options:
+                default_cap_model = "hard"
+            cap_model = st.selectbox(
+                "anneal.cap_model",
+                options=cap_model_options,
+                index=cap_model_options.index(default_cap_model),
+            )
+            cap_len_um = st.number_input(
+                "anneal.cap_len_um",
+                min_value=1e-12,
+                value=float(defaults["cap_len_um"]),
+                format="%.6g",
+                disabled=(cap_model != "exp"),
             )
 
             open_types = ["robin", "neumann", "dirichlet"]
@@ -1056,6 +963,8 @@ def run_gui() -> None:
                 "oxidation_apply_on": str(oxidation_apply_on),
                 "oxidation_consume_dopants": bool(oxidation_consume_dopants),
                 "oxidation_update_materials": bool(oxidation_update_materials),
+                "oxidation_mask_weighting": str(oxidation_mask_weighting),
+                "oxidation_open_threshold": float(oxidation_open_threshold),
                 "D_cm2_s": float(D_cm2_s),
                 "total_t_s": float(total_t_s),
                 "dt_s": float(dt_s),
@@ -1063,8 +972,11 @@ def run_gui() -> None:
                 "arrhenius_D0_cm2_s": float(arrhenius_D0_cm2_s),
                 "arrhenius_Ea_eV": float(arrhenius_Ea_eV),
                 "arrhenius_T_C": float(arrhenius_T_C),
+                "anneal_schedule_text": str(anneal_schedule_text),
                 "oxide_D_scale": float(oxide_D_scale),
                 "cap_eps_um": float(cap_eps_um),
+                "cap_model": str(cap_model),
+                "cap_len_um": float(cap_len_um),
                 "top_open_type": top_open_type,
                 "h_cm_s": float(h_cm_s),
                 "Ceq_cm3": float(Ceq_cm3),

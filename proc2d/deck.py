@@ -9,7 +9,12 @@ from typing import Any
 import numpy as np
 import yaml
 
-from .diffusion import anneal_implicit, anneal_implicit_with_history, parse_top_bc_config
+from .diffusion import (
+    anneal_implicit,
+    anneal_implicit_with_history,
+    parse_top_bc_config,
+    top_open_fraction_with_cap,
+)
 from .grid import Grid2D
 from .implant import implant_2d_gaussian
 from .io import (
@@ -99,6 +104,24 @@ def load_deck(deck_path: str | Path) -> dict[str, Any]:
     return _as_mapping(payload, "deck")
 
 
+def normalize_deck(deck: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    payload = _as_mapping(deck, "deck")
+
+    raw_steps = _required(payload, "steps", "deck")
+    if not isinstance(raw_steps, list) or not raw_steps:
+        raise DeckError("deck.steps must be a non-empty list.")
+
+    steps: list[dict[str, Any]] = []
+    for idx, raw in enumerate(raw_steps):
+        steps.append(_as_mapping(raw, f"steps[{idx}]"))
+
+    _as_mapping(_required(payload, "domain", "deck"), "deck.domain")
+
+    normalized = dict(payload)
+    normalized["steps"] = steps
+    return normalized, steps
+
+
 def _resolve_outdir(deck_path: Path, outdir_step: str | None, out_override: str | Path | None) -> Path:
     if out_override is not None:
         path = Path(out_override)
@@ -178,6 +201,7 @@ def _build_initial_state(
         default_export_outdir_step=_default_export_outdir_step(steps),
         tox_um=np.zeros(grid.Nx, dtype=float),
     )
+    assert state.tox_um is not None
     state.materials = build_material_map(grid, state.tox_um)
     return state
 
@@ -201,6 +225,7 @@ def _run_mask_step(state: SimulationState, step: dict[str, Any], idx: int) -> No
 def _run_oxidation_step(state: SimulationState, step: dict[str, Any], idx: int) -> None:
     context = f"steps[{idx}] (oxidation)"
     _ensure_state_oxide_fields(state)
+    assert state.tox_um is not None
 
     model = str(step.get("model", "deal_grove")).lower()
     if model != "deal_grove":
@@ -218,6 +243,10 @@ def _run_oxidation_step(state: SimulationState, step: dict[str, Any], idx: int) 
     apply_on = str(step.get("apply_on", "all")).lower()
     consume_dopants = bool(step.get("consume_dopants", True))
     update_materials = bool(step.get("update_materials", True))
+    mask_weighting = str(step.get("mask_weighting", "binary")).lower()
+    open_threshold = _to_float(step.get("open_threshold", 0.5), "open_threshold", context)
+    if open_threshold < 0.0 or open_threshold > 1.0:
+        raise DeckError(f"{context}.open_threshold must be within [0, 1].")
 
     if "tox_init_um" in step and np.allclose(state.tox_um, 0.0):
         tox_init = _to_float(step["tox_init_um"], "tox_init_um", context)
@@ -237,6 +266,8 @@ def _run_oxidation_step(state: SimulationState, step: dict[str, Any], idx: int) 
         gamma=gamma,
         apply_on=apply_on,
         consume_dopants=consume_dopants,
+        mask_weighting=mask_weighting,
+        open_threshold=open_threshold,
     )
 
     if np.any(tox_new > float(state.grid.Ly_um) + 1e-12):
@@ -332,11 +363,22 @@ def _anneal_diffusivity_segments(step: dict[str, Any], context: str) -> tuple[li
     return [(float(total_t), float(D))], float(dt_s)
 
 
-def _open_fraction_with_oxide_cap(state: SimulationState, base_mask: np.ndarray, cap_eps_um: float) -> np.ndarray:
+def _open_fraction_with_oxide_cap(
+    state: SimulationState,
+    base_mask: np.ndarray,
+    cap_eps_um: float,
+    cap_model: str = "hard",
+    cap_len_um: float | None = None,
+) -> np.ndarray:
     _ensure_state_oxide_fields(state)
     tox = np.asarray(state.tox_um, dtype=float)
-    cap_open = tox <= float(cap_eps_um)
-    return np.asarray(base_mask, dtype=float) * cap_open.astype(float)
+    return top_open_fraction_with_cap(
+        np.asarray(base_mask, dtype=float),
+        tox,
+        cap_eps_um=float(cap_eps_um),
+        cap_model=str(cap_model),
+        cap_len_um=cap_len_um,
+    )
 
 
 def _run_anneal_step(state: SimulationState, step: dict[str, Any], idx: int) -> None:
@@ -354,7 +396,26 @@ def _run_anneal_step(state: SimulationState, step: dict[str, Any], idx: int) -> 
 
     cap_eps_um = _to_float(step.get("cap_eps_um", 0.5 * state.grid.dy_um), "cap_eps_um", context)
     ensure_positive(f"{context}.cap_eps_um", cap_eps_um, allow_zero=True)
-    mask_eff_bc = _open_fraction_with_oxide_cap(state, mask_eff, cap_eps_um=cap_eps_um)
+
+    cap_model = str(step.get("cap_model", "hard")).lower()
+    cap_len_raw = step.get("cap_len_um")
+    cap_len_um: float | None
+    if cap_len_raw is None:
+        cap_len_um = max(0.5 * state.grid.dy_um, 1e-12) if cap_model == "exp" else None
+    else:
+        cap_len_um = _to_float(cap_len_raw, "cap_len_um", context)
+        ensure_positive(f"{context}.cap_len_um", cap_len_um)
+
+    try:
+        mask_eff_bc = _open_fraction_with_oxide_cap(
+            state,
+            mask_eff,
+            cap_eps_um=cap_eps_um,
+            cap_model=cap_model,
+            cap_len_um=cap_len_um,
+        )
+    except ValueError as exc:
+        raise DeckError(f"{context} invalid cap settings: {exc}") from exc
 
     record_cfg = _opt_mapping(step.get("record"), f"{context}.record")
     record_enable = bool(record_cfg.get("enable", False))
@@ -371,9 +432,11 @@ def _run_anneal_step(state: SimulationState, step: dict[str, Any], idx: int) -> 
         if seg_t == 0.0:
             continue
 
+        D_field: float | np.ndarray
         if state.materials is not None:
-            D_field = np.full(state.grid.shape, float(D_si), dtype=float)
-            D_field[np.asarray(state.materials) == 1] *= float(D_scale)
+            D_field_arr = np.full(state.grid.shape, float(D_si), dtype=float)
+            D_field_arr[np.asarray(state.materials) == 1] *= float(D_scale)
+            D_field = D_field_arr
         else:
             D_field = float(D_si)
 
@@ -479,10 +542,21 @@ def _run_analyze_step(state: SimulationState, step: dict[str, Any], idx: int) ->
     if lateral_results:
         report["laterals"] = lateral_results
 
-    if "iso_area_threshold_cm3" in step:
+    if "iso_area" in step:
+        iso_cfg = _opt_mapping(step.get("iso_area"), f"{context}.iso_area")
+        iso_th = _to_float(
+            _required(iso_cfg, "threshold_cm3", f"{context}.iso_area"),
+            "threshold_cm3",
+            f"{context}.iso_area",
+        )
+        ensure_positive(f"{context}.iso_area.threshold_cm3", iso_th)
+        method = str(iso_cfg.get("method", "cell_count")).lower()
+        report["iso_area_um2"] = float(iso_contour_area(C_eval, state.grid, iso_th, method=method))
+        report["iso_area_method"] = method
+    elif "iso_area_threshold_cm3" in step:
         iso_th = _to_float(step["iso_area_threshold_cm3"], "iso_area_threshold_cm3", context)
         ensure_positive(f"{context}.iso_area_threshold_cm3", iso_th)
-        report["iso_area_um2"] = float(iso_contour_area(C_eval, state.grid, iso_th))
+        report["iso_area_um2"] = float(iso_contour_area(C_eval, state.grid, iso_th, method="cell_count"))
 
     sheet_cfg = _opt_mapping(step.get("sheet_dose"), f"{context}.sheet_dose")
     save_sheet_csv = bool(sheet_cfg.get("save_csv", False))
@@ -542,20 +616,20 @@ def _run_export_step(state: SimulationState, step: dict[str, Any], idx: int) -> 
     state.exports.extend(written)
 
 
-def run_deck(deck_path: str | Path, out_override: str | Path | None = None) -> SimulationState:
-    """Run all process steps from a YAML deck."""
-    deck_path = Path(deck_path).resolve()
-    deck = load_deck(deck_path)
+def run_deck_data(
+    deck: dict[str, Any],
+    *,
+    deck_path: str | Path | None = None,
+    out_override: str | Path | None = None,
+) -> SimulationState:
+    """Run all process steps from an in-memory deck mapping."""
+    if deck_path is None:
+        deck_path_obj = (Path.cwd() / "_inline_deck.yaml").resolve()
+    else:
+        deck_path_obj = Path(deck_path).resolve()
 
-    raw_steps = _required(deck, "steps", "deck")
-    if not isinstance(raw_steps, list) or not raw_steps:
-        raise DeckError("deck.steps must be a non-empty list.")
-
-    steps: list[dict[str, Any]] = []
-    for idx, raw in enumerate(raw_steps):
-        steps.append(_as_mapping(raw, f"steps[{idx}]"))
-
-    state = _build_initial_state(deck, deck_path, steps=steps, out_override=out_override)
+    normalized, steps = normalize_deck(deck)
+    state = _build_initial_state(normalized, deck_path_obj, steps=steps, out_override=out_override)
 
     for idx, step in enumerate(steps):
         stype = str(_required(step, "type", f"steps[{idx}]"))
@@ -585,3 +659,18 @@ def run_deck(deck_path: str | Path, out_override: str | Path | None = None) -> S
             raise DeckError(f"Step {idx} ('{stype_l}') failed: {exc}") from exc
 
     return state
+
+
+def run_deck(deck_path: str | Path, out_override: str | Path | None = None) -> SimulationState:
+    """Run all process steps from a YAML deck."""
+    path = Path(deck_path).resolve()
+    deck = load_deck(path)
+    from .engine import run_deck_mapping
+
+    out_path = None if out_override is None else Path(out_override)
+    result = run_deck_mapping(
+        deck,
+        base_dir=path.parent,
+        out_override=out_path,
+    )
+    return result.state

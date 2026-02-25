@@ -18,6 +18,8 @@ steps:
     B_um2_s: 0.01
     gamma: 2.27
     apply_on: all
+    mask_weighting: binary
+    open_threshold: 0.5
     consume_dopants: true
     update_materials: true
 
@@ -37,6 +39,7 @@ steps:
     oxide:
       D_scale: 0.0
     cap_eps_um: 0.001
+    cap_model: hard
     top_bc:
       open:
         type: robin

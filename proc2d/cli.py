@@ -22,6 +22,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override export output directory",
     )
 
+    selfcheck_p = sub.add_parser("selfcheck", help="Run environment checks")
+    selfcheck_p.add_argument(
+        "--no-smoke",
+        action="store_true",
+        help="Skip simulation smoke test",
+    )
+
     return parser
 
 
@@ -42,6 +49,13 @@ def main(argv: list[str] | None = None) -> int:
             for outdir in outdirs:
                 print(f"Output: {outdir}")
         return 0
+
+    if args.command == "selfcheck":
+        from .selfcheck import run_selfcheck
+
+        report = run_selfcheck(smoke=not bool(args.no_smoke))
+        print(report.to_text())
+        return 0 if report.ok else 2
 
     parser.exit(2, "Unknown command\n")
     return 2
