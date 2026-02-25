@@ -1,36 +1,29 @@
 # proc2d 프로젝트 현황 보고서
 
-작성일: 2026-02-20  
-대상 경로: `/mnt/c/Users/user/semisimul`
+작성일: 2026-02-25  
+대상 경로: `/home/bogeun/projects/semisimul`
 
 ## 1) 문서 목적
 
-이 문서는 `proc2d` 코드베이스의 **현재 구현 상태(기능/검증/운영 기반)**를 한 번에 파악하기 위한 최신 리포트다.  
-특히 이번 스프린트 목표였던 Core(Analyze/History/VTK), GUI 통합, Ops 정리 반영 여부를 중심으로 정리한다.
+이 문서는 `proc2d` 저장소의 현재 구현 범위, 검증 결과, 작업트리 상태를 한 번에 확인하기 위한 최신 리포트다.
 
 ---
 
 ## 2) 요약 (Executive Summary)
 
-이번 업데이트 기준 결론:
+현재 기준 결론:
 
-- 기존 MVP(`mask -> implant -> anneal -> export`)는 하위호환 유지
-- Core 확장 3종 반영 완료
-  - Analyze/Metrics step
-  - Anneal History 기록
-  - VTK export
-- GUI 확장 반영 완료
-  - Metrics/History/VTK/ZIP 다운로드
-  - 최근 2회 Before/After Compare 탭
-- Ops 파일 반영 완료
-  - `.gitignore` 보강
-  - `scripts/setup_user_install.sh`, `scripts/setup_venv.sh`
-  - `.github/workflows/ci.yml`
-- 검증 통과
-  - `pytest`: **7 passed**
-  - `deck_basic` 실행 성공
-  - `deck_analysis_history_vtk` 실행 성공(11개 산출물)
-  - GUI Streamlit 스모크 기동 성공
+- Core 파이프라인(`mask -> oxidation(optional) -> implant -> anneal -> analyze -> export`) 동작
+- P2 확장 기능(산화/Arrhenius/material map/tox 출력) 반영 상태
+- CLI/GUI 모두 사용 가능
+- 테스트 통과: **12 passed**
+- 예제 deck 실행 확인:
+  - `deck_analysis_history_vtk`: exports=12
+  - `deck_oxidation_implant_anneal`: exports=12
+  - `deck_schedule_anneal`: exports=2
+- Git 작업트리는 clean 아님
+  - 수정: `scripts/setup_venv.sh`
+  - 신규(추적 안됨): `The`, `This` (빈 파일)
 
 ---
 
@@ -38,11 +31,11 @@
 
 - 프로젝트 성격: 반도체 공정 2D 단면(Process 2D cross-section) 시뮬레이터
 - 패키지명/버전: `proc2d / 0.1.0`
-- 언어: Python 3.10+
-- 빌드: `pyproject.toml` + setuptools editable install
+- 언어/런타임: Python 3.10+
+- 빌드/배포: `pyproject.toml` + setuptools editable install
 - 실행 인터페이스:
-  - CLI: `python3 -m proc2d run ...`
-  - GUI: `python3 -m streamlit run proc2d/gui_script.py`
+  - CLI: `python3 -m proc2d run <deck.yaml> --out <dir>`
+  - GUI: `python3 -m streamlit run proc2d/gui_script.py --server.port 8502`
 
 ---
 
@@ -50,252 +43,140 @@
 
 ### 4.1 Git 상태
 
-- 현재 경로는 Git 저장소임
 - 브랜치: `main` (원격 `origin/main` 트래킹)
 - 원격: `https://github.com/Bogeunj/semisimul.git`
-- 현재 작업트리 상태: **변경/신규 파일 존재(아직 커밋 전)**
+- 현재 작업트리:
+  - `M scripts/setup_venv.sh`
+  - `?? The`
+  - `?? This`
 
-현재 변경 파일(요약):
-
-- 수정: `.gitignore`, `README.md`, `proc2d/deck.py`, `proc2d/diffusion.py`, `proc2d/gui_app.py`, `proc2d/io.py`
-- 신규: `.github/workflows/ci.yml`, `proc2d/metrics.py`, `examples/deck_analysis_history_vtk.yaml`, `scripts/*.sh`, `tests/test_metrics.py`, `tests/test_vtk_writer.py`, `tests/test_history.py`
-
-### 4.2 구조 요약
+### 4.2 디렉터리 구성 요약
 
 - 소스: `proc2d/`
 - 테스트: `tests/`
-- 예제 deck: `examples/deck_basic.yaml`, `examples/deck_analysis_history_vtk.yaml`
-- 실행 출력 예시: `outputs/run1/`, `outputs/run2/`
+- 예제 deck:
+  - `examples/deck_basic.yaml`
+  - `examples/deck_analysis_history_vtk.yaml`
+  - `examples/deck_oxidation_implant_anneal.yaml`
+  - `examples/deck_schedule_anneal.yaml`
 
 ---
 
-## 5) 기능 구현 현황 (요구사항 매핑)
+## 5) 기능 구현 현황
 
-## 5.1 Core-1: Analyze/Metrics step
+### 5.1 시뮬레이션 코어
 
-상태: **완료**
+- 1D mask openings + lateral Gaussian smoothing
+- 2D separable implant (`tox(x)` 반영)
+- oxidation step (Deal-Grove, 표면 이동, Si/SiO2 material map)
+- implicit diffusion anneal
+  - 상수 `D_cm2_s`
+  - Arrhenius(`D0`, `Ea`, `T`) + schedule
+- mixed top BC
+  - open: Robin/Neumann/Dirichlet
+  - blocked: Neumann
+- oxide barrier 제어 (`oxide.D_scale`, `cap_eps_um`)
 
-구현 내용:
+### 5.2 분석/출력
 
-- 신규 모듈 `proc2d/metrics.py`
-  - `total_mass(C, grid)`
-  - `peak_info(C, grid)`
-  - `sheet_dose_vs_x(C, grid)`
-  - `junction_depth_1d(profile, y, threshold, mode)`
-  - `junction_depth(C, grid, x_um, threshold_cm3)`
-  - `lateral_extents_at_y(C, grid, y_um, threshold_cm3)`
-  - `iso_contour_area(C, grid, threshold_cm3)`
-
-- `deck.py`에 `type: analyze` step 추가
-  - 하위호환 유지: analyze step이 없으면 기존 동작 동일
-
-- 출력 파일
-  - `metrics.json`
-  - `metrics.csv`
-  - `sheet_dose_vs_x.csv` (옵션)
-
-- 내부 상태 저장
-  - `SimulationState.metrics`에 결과 저장
-
-## 5.2 Core-2: Anneal History 기록
-
-상태: **완료**
-
-구현 내용:
-
-- `diffusion.py`
-  - `top_flux_out(...)` 추가
-  - `anneal_implicit_with_history(...)` 추가
-
-- 기록 필드(최소 요구 충족)
-  - `time_s`
-  - `mass`
-  - `peak_cm3`
-  - `flux_out`
-  - `residual`
-
-- `deck.py` anneal step 확장
-  - `record.enable`, `record.every_s`, `save_csv`, `save_png` 지원
-  - 출력: `history.csv`, `history.png`
-
-- 하위호환
-  - 기존 `anneal_implicit(...)` 인터페이스 유지
-
-## 5.3 Core-3: VTK export
-
-상태: **완료**
-
-구현 내용:
-
-- `io.py`
-  - `save_vtk_structured_points(...)` 추가
-  - `export_results(..., formats=...)`에 `vtk` 지원 추가
-
-- 출력
-  - `C.vtk`
-  - `C_log10.vtk` (`plot.log10=true`일 때)
-
-- 포맷
-  - legacy VTK ASCII, `STRUCTURED_POINTS`
-  - `DIMENSIONS Nx Ny 1`
-  - `SPACING dx_um dy_um 1`
-
-## 5.4 GUI-1: Core 기능 통합
-
-상태: **완료**
-
-반영 사항:
-
-- Run 옵션 토글
-  - Compute metrics
-  - Record anneal history
-  - Export VTK
-  - Download all outputs as ZIP
-
-- 결과 탭
-  - `Map` (mask overlay 포함)
-  - `Linecuts` (linear/log10)
-  - `Metrics` (json 표시 + 다운로드)
-  - `History` (그래프 + CSV 다운로드)
-  - `Artifacts` (VTK/ZIP/C.png 포함)
-
-- 실행시간 표시
-  - `time.perf_counter()` 기반
-
-## 5.5 GUI-2: 최근 2회 Before/After 비교
-
-상태: **완료**
-
-반영 사항:
-
-- 세션에 최근 2회 run 기록 유지
-- Compare 탭에서 A/B 맵, linecut overlay, metrics diff 표 제공
-- 메모리 고려 옵션
-  - 기본: full C 미저장
-  - 옵션: `Store full C in session` 켜면 full C 저장
-
-## 5.6 Ops-1: Git/CI 기반 파일
-
-상태: **완료(파일 반영)**
-
-- `.gitignore` 보강
-  - `__pycache__`, `.pytest_cache`, `*.egg-info`, `.venv`, `outputs`, `*.vtk`, `*.npy`, `.streamlit` 등
-
-- CI 파일 추가
-  - `.github/workflows/ci.yml`
-  - Python 3.10/3.11 매트릭스, `pip install -e ".[dev]"`, `pytest -q`
-
-## 5.7 Ops-2: 환경 재현성 스크립트
-
-상태: **완료**
-
-- `scripts/setup_user_install.sh`
-  - `--user --break-system-packages` 루트 자동화
-  - `~/.local/bin` PATH 안내
-
-- `scripts/setup_venv.sh`
-  - venv 생성 + `-e ".[dev,gui]"` 설치
-  - venv 미지원 환경 힌트 제공
-
----
-
-## 6) 테스트/검증 현황
-
-### 6.1 테스트 구성
-
-기존 + 신규 포함 총 7개 통과:
-
-- 기존:
-  - `tests/test_mass_conservation.py`
-  - `tests/test_symmetry.py`
-  - `tests/test_1d_limit.py`
-- 신규:
-  - `tests/test_metrics.py`
-  - `tests/test_vtk_writer.py`
-  - `tests/test_history.py`
-
-### 6.2 최신 실행 결과
-
-1) 단위 테스트
-
-- 명령: `python3 -m pytest -q`
-- 결과: `....... [100%]` (**7 passed**)
-
-2) 기본 deck 실행
-
-- 명령: `python3 -m proc2d run examples/deck_basic.yaml --out outputs/run1`
-- 결과: 정상 완료, exports=4
-
-3) 확장 deck 실행(analyze/history/vtk)
-
-- 명령: `python3 -m proc2d run examples/deck_analysis_history_vtk.yaml --out outputs/run2`
-- 결과: 정상 완료, exports=11
-- 생성 확인:
-  - `C.npy`, `C.png`, `C.vtk`, `C_log10.vtk`
+- Analyze step
   - `metrics.json`, `metrics.csv`, `sheet_dose_vs_x.csv`
+  - total mass, peak, junction/lateral 지표 계산
+- Anneal history
   - `history.csv`, `history.png`
-  - linecut CSV 2개
+  - 필드: `time_s`, `mass`, `peak_cm3`, `flux_out`, `residual`
+- Export
+  - 기본: `npy`, `csv`, `png`
+  - 시각화: `vtk` (`C.vtk`, `C_log10.vtk`, `material.vtk`)
+  - 산화막: `tox_vs_x.csv`, `tox_vs_x.png`
 
-4) GUI 스모크
+### 5.3 GUI
 
-- 명령: `python3 -m streamlit run proc2d/gui_script.py --server.headless true --server.port 8503`
-- 결과: 로컬 URL 출력 확인(기동 성공)
-
----
-
-## 7) 문서화 상태
-
-상태: **업데이트 완료**
-
-- `README.md`에 반영:
-  - analyze step / history 옵션 / vtk 설명
-  - GUI 신규 탭/다운로드 기능
-  - venv 가능/불가 설치 루트
-  - 예제 deck 2종 실행 가이드
+- 실행/파라미터 조정 + 결과 탭 제공
+  - `Map`, `Linecuts`, `Metrics`, `History`, `Compare`, `Artifacts`
+- 다운로드/보조 기능
+  - VTK, ZIP 다운로드
+  - 최근 2회 before/after 비교
+  - full C 세션 저장(옵션)
 
 ---
 
-## 8) 남은 리스크/주의사항
+## 6) 테스트/검증 현황 (2026-02-25 기준)
 
-1. 현재 변경사항은 아직 미커밋 상태
-   - 커밋/푸시 전 누락 파일 점검 필요
+### 6.1 테스트 실행
 
-2. GUI 비교 기능은 옵션 기반 full C 저장 시 메모리 사용량 증가 가능
+- 명령: `.venv/bin/python -m pytest`
+- 결과: `12 passed in 0.88s`
 
-3. CI 파일은 추가되었지만 실제 GitHub Actions 동작은 push 후 확인 필요
+테스트 커버(파일):
 
-4. Streamlit 포트 충돌 가능
-   - 예: 8502 사용중이면 다른 포트(8503 등) 사용 필요
+- `tests/test_mass_conservation.py`
+- `tests/test_symmetry.py`
+- `tests/test_1d_limit.py`
+- `tests/test_metrics.py`
+- `tests/test_history.py`
+- `tests/test_vtk_writer.py`
+- `tests/test_oxidation_p2.py`
+
+### 6.2 예제 deck 실행
+
+1) Analyze/History/VTK deck
+
+- 명령: `.venv/bin/python -m proc2d run examples/deck_analysis_history_vtk.yaml --out outputs/run2`
+- 결과: `Done. Grid=(201, 401), exports=12`
+- 생성물: `C*.vtk`, `history.*`, `metrics.*`, linecut CSV, `sheet_dose_vs_x.csv`
+
+2) P2 산화 + Arrhenius deck
+
+- 명령: `.venv/bin/python -m proc2d run examples/deck_oxidation_implant_anneal.yaml --out outputs/run_p2`
+- 결과: `Done. Grid=(201, 401), exports=12`
+- 생성물: `material.vtk`, `tox_vs_x.csv`, `tox_vs_x.png` 포함
+
+3) Arrhenius schedule deck
+
+- 명령: `.venv/bin/python -m proc2d run examples/deck_schedule_anneal.yaml --out outputs/run_sched`
+- 결과: `Done. Grid=(201, 401), exports=2`
 
 ---
 
-## 9) 권장 다음 액션
+## 7) 주의사항 / 리스크
+
+1. 작업트리가 clean 상태가 아님
+
+- `scripts/setup_venv.sh` 변경 존재
+- `The`, `This` 빈 파일이 untracked로 존재
+
+2. 출력 디렉터리 재사용 시 이전 결과 파일이 남을 수 있음
+
+- 같은 `--out` 경로를 재사용하면 이전 산출물이 섞여 보일 수 있으므로 필요 시 수동 정리 권장
+
+3. GUI 실행 시 포트 충돌 가능
+
+- `8502` 사용 중이면 `--server.port`를 다른 값으로 지정 필요
+
+---
+
+## 8) 권장 다음 액션
 
 P0:
 
-1. 변경사항 커밋
-2. 원격 push 후 CI 동작 확인
-3. GUI 수동 점검
-   - Metrics/History/Compare 탭
-   - ZIP/VTK 다운로드
+1. 불필요 파일 정리: `The`, `This`
+2. `scripts/setup_venv.sh` 변경 내용 검토 후 커밋 여부 결정
+3. 결과 디렉터리 운영 원칙 통일(실행 전 비우기 또는 실행별 별도 outdir)
 
 P1:
 
-1. Compare 탭의 large-grid 성능 최적화
-2. Analyze 지표 확장(요구 시 profile overlay 등)
+1. 보고서와 함께 릴리즈 노트/CHANGELOG 동기화
+2. CI에서 예제 deck smoke test 추가 여부 검토
 
 ---
 
-## 10) 체크리스트 (현재 시점)
+## 9) 체크리스트
 
-- [x] Core-1 Analyze/Metrics
-- [x] Core-2 Anneal History
-- [x] Core-3 VTK export
-- [x] GUI-1 Metrics/History/VTK/ZIP 통합
-- [x] GUI-2 최근 2회 Compare
-- [x] Ops-1 `.gitignore` + CI 파일
-- [x] Ops-2 setup 스크립트 2종
-- [x] 테스트 통과 (7 passed)
-- [x] `deck_basic` 실행 검증
-- [x] `deck_analysis_history_vtk` 실행 검증
-- [ ] 최종 커밋/푸시 및 CI 원격 확인
+- [x] Core 파이프라인 동작 확인
+- [x] P2(oxidation/Arrhenius/tox/material) 동작 확인
+- [x] Analyze/History/VTK 출력 확인
+- [x] GUI 기능 존재 확인(README 기준)
+- [x] 테스트 통과(12 passed)
+- [x] 예제 deck 3종 실행 확인
+- [ ] 최종 커밋/푸시 및 원격 CI 확인
