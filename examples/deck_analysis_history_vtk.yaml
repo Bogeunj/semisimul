@@ -34,6 +34,9 @@ steps:
       save_png: true
 
   - type: analyze
+    iso_area:
+      threshold_cm3: 1.0e17
+      method: tri_linear
     junctions:
       - x_um: 1.0
         threshold_cm3: 1.0e17

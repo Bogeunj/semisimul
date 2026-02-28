@@ -21,5 +21,6 @@ echo
 echo "[proc2d] Install completed inside .venv"
 echo "Next commands:"
 echo "  source .venv/bin/activate"
+echo "  python -m proc2d selfcheck"
 echo "  python -m pytest"
 echo "  python -m proc2d run examples/deck_basic.yaml --out outputs/run1"

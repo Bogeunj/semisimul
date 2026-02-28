@@ -10,7 +10,7 @@
 - 2D implicit diffusion anneal
 - anneal diffusivity: 상수 `D_cm2_s` 또는 Arrhenius(+schedule)
 - mixed top BC (open: Robin/Neumann/Dirichlet, blocked: Neumann)
-- oxide barrier: `oxide.D_scale`, `cap_eps_um`로 top open gate 제어
+- oxide barrier: `oxide.D_scale`, `cap_eps_um`, `cap_model`로 top open gate 제어
 - deck step 파이프라인(권장 순서): `mask -> oxidation(optional) -> implant -> anneal -> analyze -> export`
 - 출력: `npy`, `csv`, `png`, `vtk(ParaView)`, `tox_vs_x.(csv/png)`, `material.vtk`
 - GUI(Streamlit): 파라미터 조정/실행/맵/라인컷/metrics/history/compare/다운로드
@@ -32,6 +32,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
 python -m pip install -e ".[dev,gui]"
+python -m proc2d selfcheck
 ```
 
 ### B) venv 어려운 환경 (WSL/시스템 Python)
@@ -44,6 +45,7 @@ python -m pip install -e ".[dev,gui]"
 
 ```bash
 python3 -m pip install --user --break-system-packages -e ".[dev,gui]"
+python3 -m proc2d selfcheck
 ```
 
 `~/.local/bin`이 PATH에 없으면 아래를 쉘 설정에 추가하세요.
@@ -60,6 +62,7 @@ CLI:
 
 ```bash
 python3 -m proc2d run examples/deck_basic.yaml --out outputs/run1
+python3 -m proc2d selfcheck
 ```
 
 GUI:
@@ -113,6 +116,8 @@ steps:
     B_um2_s: 0.01
     gamma: 2.27
     apply_on: all
+    mask_weighting: binary
+    open_threshold: 0.5
     consume_dopants: true
     update_materials: true
 
@@ -142,6 +147,8 @@ steps:
     oxide:
       D_scale: 0.0
     cap_eps_um: 0.001
+    cap_model: hard
+    # cap_len_um: 0.01  # cap_model=exp일 때 사용
     top_bc:
       open:
         type: robin
@@ -151,6 +158,9 @@ steps:
         type: neumann
 
   - type: analyze
+    iso_area:
+      threshold_cm3: 1.0e17
+      method: tri_linear
     junctions:
       - x_um: 1.0
         threshold_cm3: 1.0e17
@@ -209,6 +219,8 @@ record:
 - `time_s`, `A_um`, `B_um2_s`: Deal-Grove 파라미터
 - `gamma`: Si->SiO2 체적 팽창계수 (기본 2.27)
 - `apply_on`: `all | open | blocked`
+- `mask_weighting`: `binary | time_scale` (기본 `binary`)
+- `open_threshold`: binary 모드 open 판정 임계값
 - `consume_dopants`: 산화막 영역 도펀트 0 처리 여부
 - `update_materials`: material map 갱신 여부
 
