@@ -104,5 +104,6 @@ def build_initial_state(
         default_export_outdir_step=default_export_outdir_step(steps),
         tox_um=np.zeros(grid.Nx, dtype=float),
     )
+    assert state.tox_um is not None
     state.materials = build_material_map(grid, state.tox_um)
     return state

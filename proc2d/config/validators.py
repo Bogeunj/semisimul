@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence, TypeVar
-
-T = TypeVar("T")
+from typing import Any, Mapping, Sequence
 
 
 def as_mapping(value: Any, context: str) -> dict[str, Any]:
@@ -55,7 +53,7 @@ def ensure_choice(name: str, value: str, allowed: Sequence[str]) -> str:
     return val
 
 
-def ensure_nonnegative(name: str, value: T, *, allow_zero: bool = True) -> T:
+def ensure_nonnegative(name: str, value: float, *, allow_zero: bool = True) -> float:
     """Validate scalar non-negativity for already-numeric values."""
     x = float(value)
     if allow_zero:
@@ -63,4 +61,4 @@ def ensure_nonnegative(name: str, value: T, *, allow_zero: bool = True) -> T:
             raise ValueError(f"{name} must be >= 0.")
     elif x <= 0.0:
         raise ValueError(f"{name} must be > 0.")
-    return value
+    return float(value)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping, cast
 
 from ..mask import openings_from_any
 from .deck_models import (
@@ -212,13 +212,16 @@ def parse_step_configs(deck: Mapping[str, Any]) -> list[
                 )
             )
         elif stype == "oxidation":
+            apply_on = str(step.get("apply_on", "all"))
+            if apply_on not in ("all", "open", "blocked"):
+                raise ValueError(f"{context}.apply_on must be one of: all, open, blocked.")
             typed.append(
                 OxidationStepConfig(
                     time_s=to_float(required(step, "time_s", context), "time_s", context),
                     A_um=to_float(required(step, "A_um", context), "A_um", context),
                     B_um2_s=to_float(required(step, "B_um2_s", context), "B_um2_s", context),
                     gamma=to_float(step.get("gamma", 2.27), "gamma", context),
-                    apply_on=str(step.get("apply_on", "all")),
+                    apply_on=cast(Literal["all", "open", "blocked"], apply_on),
                     consume_dopants=bool(step.get("consume_dopants", True)),
                     update_materials=bool(step.get("update_materials", True)),
                 )

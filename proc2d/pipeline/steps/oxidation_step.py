@@ -36,11 +36,13 @@ def run_oxidation_step(state: SimulationState, step: dict[str, Any], idx: int) -
     consume_dopants = bool(step.get("consume_dopants", True))
     update_materials = bool(step.get("update_materials", True))
 
+    assert state.tox_um is not None
     if "tox_init_um" in step and np.allclose(state.tox_um, 0.0):
         tox_init = to_float(step["tox_init_um"], "tox_init_um", context)
         ensure_positive(f"{context}.tox_init_um", tox_init, allow_zero=True)
         state.tox_um = np.full(state.grid.Nx, tox_init, dtype=float)
 
+    assert state.tox_um is not None
     mask_eff = state.mask_eff if state.mask_eff is not None else full_open_mask(state.grid.Nx)
     Cn, tox_new, materials_new, _ = apply_oxidation(
         state.C,

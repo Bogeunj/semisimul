@@ -57,7 +57,7 @@ def _heatmap_figure(
     fig, ax = plt.subplots(figsize=(8.5, 4.0), dpi=140)
     im = ax.imshow(
         plot_arr,
-        extent=[float(grid.x_um[0]), float(grid.x_um[-1]), float(grid.y_um[-1]), float(grid.y_um[0])],
+        extent=(float(grid.x_um[0]), float(grid.x_um[-1]), float(grid.y_um[-1]), float(grid.y_um[0])),
         origin="upper",
         aspect="auto",
         cmap="inferno",
@@ -121,8 +121,6 @@ def _linecut_csv_text(
 
 def _history_figure(history: list[dict[str, float]]):
     def _safe_float(value: object) -> float:
-        if isinstance(value, (int, float, np.floating)):
-            return float(value)
         try:
             return float(str(value))
         except Exception:

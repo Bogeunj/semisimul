@@ -125,6 +125,7 @@ def run_anneal_step(state: SimulationState, step: dict[str, Any], idx: int) -> N
         if seg_t == 0.0:
             continue
 
+        D_field: float | np.ndarray
         if state.materials is not None:
             D_field = np.full(state.grid.shape, float(D_si), dtype=float)
             D_field[np.asarray(state.materials) == 1] *= float(D_scale)

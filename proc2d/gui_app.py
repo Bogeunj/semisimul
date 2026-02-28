@@ -14,7 +14,7 @@ def load_default_params() -> dict[str, Any]:
 
 def run_simulation(params: dict[str, Any]) -> dict[str, Any]:
     """Run GUI simulation adapter lazily from app module."""
-    from .app.gui.app import run_simulation as _impl
+    from .app.gui.simulation import run_simulation as _impl
 
     return _impl(params)
 

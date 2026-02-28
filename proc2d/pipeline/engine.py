@@ -21,7 +21,7 @@ def run(steps: Iterable[Mapping[str, Any]], context: SimulationState, registry: 
         if not isinstance(raw_step, Mapping):
             raise DeckError(f"steps[{idx}] must be a mapping.")
 
-        step = raw_step
+        step = raw_step if isinstance(raw_step, dict) else dict(raw_step)
         stype = str(_required(step, "type", f"steps[{idx}]"))
         stype_l = stype.lower()
 

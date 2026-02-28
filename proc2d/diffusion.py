@@ -94,7 +94,7 @@ def _as_open_fraction(mask_eff: np.ndarray | None, nx: int) -> np.ndarray:
 
 def _as_D_field(D_cm2_s: float | np.ndarray, grid: Grid2D) -> np.ndarray:
     if np.isscalar(D_cm2_s):
-        D = float(D_cm2_s)
+        D = float(np.asarray(D_cm2_s, dtype=float).item())
         ensure_positive("D_cm2_s", D, allow_zero=True)
         return np.full(grid.shape, D, dtype=float)
 

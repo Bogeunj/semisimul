@@ -65,6 +65,12 @@ python3 -m proc2d run examples/deck_basic.yaml --out outputs/run1
 GUI:
 
 ```bash
+proc2d-gui --server.port 8502
+```
+
+또는:
+
+```bash
 python3 -m streamlit run proc2d/gui_script.py --server.port 8502
 ```
 
@@ -298,7 +304,7 @@ python3 -m pytest
 
 ```bash
 python3 -m pytest -m "unit"
-python3 -m pytest -m "not integration and not adapter"
+python3 -m pytest -m "not integration and not adapter and not slow"
 ```
 
 포함 테스트:

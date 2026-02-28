@@ -17,7 +17,7 @@ def ensure_outdir(outdir: str | Path) -> Path:
     """Create output directory if needed and return resolved path."""
     path = Path(outdir)
     path.mkdir(parents=True, exist_ok=True)
-    return path
+    return path.resolve()
 
 
 __all__ = [

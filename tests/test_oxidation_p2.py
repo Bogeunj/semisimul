@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 import yaml
 
 from proc2d.deck import _arrhenius_D, run_deck
@@ -10,6 +11,9 @@ from proc2d.grid import Grid2D
 from proc2d.implant import implant_2d_gaussian
 from proc2d.mask import full_open_mask
 from proc2d.oxidation import apply_surface_outward_shift, deal_grove_tox_update
+
+
+pytestmark = pytest.mark.integration
 
 
 def test_deal_grove_tox_update_monotonic() -> None:

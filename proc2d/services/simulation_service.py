@@ -58,7 +58,10 @@ class SimulationService:
         except (TypeError, ValueError) as exc:
             raise DeckError(str(exc)) from exc
 
-        state = build_initial_state(domain=domain, deck_path=path, steps=steps, out_override=out_override)
+        try:
+            state = build_initial_state(domain=domain, deck_path=path, steps=steps, out_override=out_override)
+        except (TypeError, ValueError) as exc:
+            raise DeckError(str(exc)) from exc
         return self.run_steps(state=state, steps=steps)
 
 

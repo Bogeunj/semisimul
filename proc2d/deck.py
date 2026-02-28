@@ -32,6 +32,8 @@ def load_deck(deck_path: str | Path) -> dict[str, Any]:
     try:
         with path.open("r", encoding="utf-8") as f:
             payload = yaml.safe_load(f)
+    except (OSError, UnicodeDecodeError) as exc:
+        raise DeckError(f"Failed to read deck file: {path}") from exc
     except yaml.YAMLError as exc:
         raise DeckError(f"Failed to parse YAML deck: {path}") from exc
 

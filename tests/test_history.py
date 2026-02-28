@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import csv
 
+import pytest
 import yaml
 
 from proc2d.deck import run_deck
+
+
+pytestmark = pytest.mark.integration
 
 
 def test_anneal_history_csv_created_and_monotonic(tmp_path) -> None:
