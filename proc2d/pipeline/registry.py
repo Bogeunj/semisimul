@@ -20,7 +20,7 @@ class StepRegistry(Generic[StateT]):
 
     @staticmethod
     def _normalize(step_type: str) -> str:
-        return str(step_type).strip().lower()
+        return str(step_type).lower()
 
     def register(self, step_type: str, runner: StepRunner[StateT]) -> None:
         if not callable(runner):
@@ -31,7 +31,7 @@ class StepRegistry(Generic[StateT]):
         return self._handlers.get(self._normalize(step_type))
 
     def supported_types(self) -> tuple[str, ...]:
-        return tuple(sorted(self._handlers))
+        return tuple(self._handlers)
 
 
 def create_step_registry(handlers: dict[str, StepRunner[StateT]]) -> StepRegistry[StateT]:

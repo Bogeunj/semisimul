@@ -77,6 +77,8 @@ python3 -m streamlit run proc2d/gui_script.py --server.port 8502
 - GUI 분할: `proc2d/app/gui/forms.py`, `proc2d/app/gui/tabs.py`, `proc2d/app/gui/compare.py`, `proc2d/app/gui/session.py`
 - 설정 모델: `proc2d/config/gui_models.py`, `proc2d/config/deck_models.py`, `proc2d/config/parser.py`
 - 출력 모듈 분리: `proc2d/export/*` (writer/manager), `proc2d/io.py`는 하위호환 facade
+- 도메인/물리/분석 계층: `proc2d/domain/*`, `proc2d/physics/*`, `proc2d/analysis/*`
+- step 실행 분해: `proc2d/pipeline/engine.py`, `proc2d/pipeline/context.py`, `proc2d/pipeline/steps/*`
 
 ---
 
@@ -292,6 +294,13 @@ python3 -m proc2d run examples/deck_oxidation_implant_anneal.yaml --out outputs/
 python3 -m pytest
 ```
 
+계층 실행 예시:
+
+```bash
+python3 -m pytest -m "unit"
+python3 -m pytest -m "not integration and not adapter"
+```
+
 포함 테스트:
 
 - mass conservation
@@ -303,6 +312,12 @@ python3 -m pytest
 - Deal-Grove oxidation / surface shift / implant depth shift
 - Arrhenius 온도 증가 시 D 증가 경향
 - deck/GUI 공통 서비스 parity + artifact manifest 회귀
+
+타입 체크:
+
+```bash
+python3 -m mypy
+```
 
 ---
 

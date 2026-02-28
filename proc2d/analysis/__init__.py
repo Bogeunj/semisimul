@@ -9,7 +9,7 @@ from .metrics import (
     sheet_dose_vs_x,
     total_mass,
 )
-from .reports import AnalyzeArtifacts, build_metrics_report, save_metrics_artifacts
+from .reports import AnalyzeArtifacts, build_metrics_report, run_metrics_analysis, save_metrics_artifacts
 
 __all__ = [
     "AnalyzeArtifacts",
@@ -19,6 +19,7 @@ __all__ = [
     "junction_depth_1d",
     "lateral_extents_at_y",
     "peak_info",
+    "run_metrics_analysis",
     "save_metrics_artifacts",
     "sheet_dose_vs_x",
     "total_mass",

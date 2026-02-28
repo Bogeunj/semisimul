@@ -14,6 +14,8 @@ from proc2d.config import GuiRunConfig, build_deck_from_gui_config
 from proc2d.deck import run_deck
 from proc2d.gui_app import run_simulation
 
+pytestmark = pytest.mark.integration
+
 
 def _sample_gui_params(outdir: Path) -> dict[str, object]:
     return {

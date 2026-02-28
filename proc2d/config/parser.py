@@ -4,63 +4,45 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .deck_models import DomainConfig
+from ..mask import openings_from_any
+from .deck_models import (
+    AnalyzeStepConfig,
+    AnnealStepConfig,
+    DomainConfig,
+    ExportStepConfig,
+    ImplantStepConfig,
+    MaskStepConfig,
+    OxidationStepConfig,
+)
 from .gui_models import GuiRunConfig
-
-
-def _as_mapping(value: Any, context: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ValueError(f"{context} must be a mapping.")
-    return value
-
-
-def _required(mapping: Mapping[str, Any], key: str, context: str) -> Any:
-    if not isinstance(mapping, Mapping):
-        raise ValueError(f"{context} must be a mapping.")
-    if key not in mapping:
-        raise ValueError(f"Missing required key '{key}' in {context}.")
-    return mapping[key]
-
-
-def _to_float(value: Any, key: str, context: str) -> float:
-    try:
-        return float(value)
-    except Exception as exc:
-        raise ValueError(f"{context}.{key} must be a number, got {value!r}.") from exc
-
-
-def _to_int(value: Any, key: str, context: str) -> int:
-    try:
-        return int(value)
-    except Exception as exc:
-        raise ValueError(f"{context}.{key} must be an integer, got {value!r}.") from exc
+from .validators import as_mapping, required, to_float, to_int
 
 
 def parse_steps(deck: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Parse and normalize deck steps."""
-    raw_steps = _required(deck, "steps", "deck")
+    raw_steps = required(deck, "steps", "deck")
     if not isinstance(raw_steps, list) or not raw_steps:
         raise ValueError("deck.steps must be a non-empty list.")
 
     steps: list[dict[str, Any]] = []
     for idx, raw in enumerate(raw_steps):
-        steps.append(_as_mapping(raw, f"steps[{idx}]"))
+        steps.append(as_mapping(raw, f"steps[{idx}]"))
     return steps
 
 
 def parse_domain_config(deck: Mapping[str, Any]) -> DomainConfig:
     """Extract strongly typed domain config from deck payload."""
-    domain = _as_mapping(_required(deck, "domain", "deck"), "deck.domain")
+    domain = as_mapping(required(deck, "domain", "deck"), "deck.domain")
 
-    Lx_um = _to_float(_required(domain, "Lx_um", "deck.domain"), "Lx_um", "deck.domain")
-    Ly_um = _to_float(_required(domain, "Ly_um", "deck.domain"), "Ly_um", "deck.domain")
-    Nx = _to_int(_required(domain, "Nx", "deck.domain"), "Nx", "deck.domain")
-    Ny = _to_int(_required(domain, "Ny", "deck.domain"), "Ny", "deck.domain")
+    Lx_um = to_float(required(domain, "Lx_um", "deck.domain"), "Lx_um", "deck.domain")
+    Ly_um = to_float(required(domain, "Ly_um", "deck.domain"), "Ly_um", "deck.domain")
+    Nx = to_int(required(domain, "Nx", "deck.domain"), "Nx", "deck.domain")
+    Ny = to_int(required(domain, "Ny", "deck.domain"), "Ny", "deck.domain")
 
     if "background_doping_cm3" in deck:
-        bg = _to_float(deck["background_doping_cm3"], "background_doping_cm3", "deck")
+        bg = to_float(deck["background_doping_cm3"], "background_doping_cm3", "deck")
     else:
-        bg = _to_float(domain.get("background_doping_cm3", 0.0), "background_doping_cm3", "deck.domain")
+        bg = to_float(domain.get("background_doping_cm3", 0.0), "background_doping_cm3", "deck.domain")
 
     return DomainConfig(Lx_um=Lx_um, Ly_um=Ly_um, Nx=Nx, Ny=Ny, background_doping_cm3=bg)
 
@@ -206,3 +188,71 @@ def build_deck_from_gui_config(cfg: GuiRunConfig) -> dict[str, Any]:
     )
 
     return deck
+
+
+def parse_step_configs(deck: Mapping[str, Any]) -> list[
+    MaskStepConfig | OxidationStepConfig | ImplantStepConfig | AnnealStepConfig | AnalyzeStepConfig | ExportStepConfig
+]:
+    """Parse deck steps into coarse typed step configs."""
+    typed: list[
+        MaskStepConfig | OxidationStepConfig | ImplantStepConfig | AnnealStepConfig | AnalyzeStepConfig | ExportStepConfig
+    ] = []
+    for idx, step in enumerate(parse_steps(deck)):
+        stype = str(required(step, "type", f"steps[{idx}]")).lower()
+        context = f"steps[{idx}]"
+
+        if stype == "mask":
+            openings_raw = required(step, "openings_um", context)
+            if not isinstance(openings_raw, list):
+                raise ValueError(f"{context}.openings_um must be a list of [start, end] pairs.")
+            typed.append(
+                MaskStepConfig(
+                    openings_um=openings_from_any(openings_raw),
+                    sigma_lat_um=to_float(step.get("sigma_lat_um", 0.0), "sigma_lat_um", context),
+                )
+            )
+        elif stype == "oxidation":
+            typed.append(
+                OxidationStepConfig(
+                    time_s=to_float(required(step, "time_s", context), "time_s", context),
+                    A_um=to_float(required(step, "A_um", context), "A_um", context),
+                    B_um2_s=to_float(required(step, "B_um2_s", context), "B_um2_s", context),
+                    gamma=to_float(step.get("gamma", 2.27), "gamma", context),
+                    apply_on=str(step.get("apply_on", "all")),
+                    consume_dopants=bool(step.get("consume_dopants", True)),
+                    update_materials=bool(step.get("update_materials", True)),
+                )
+            )
+        elif stype == "implant":
+            typed.append(
+                ImplantStepConfig(
+                    dose_cm2=to_float(required(step, "dose_cm2", context), "dose_cm2", context),
+                    Rp_um=to_float(required(step, "Rp_um", context), "Rp_um", context),
+                    dRp_um=to_float(required(step, "dRp_um", context), "dRp_um", context),
+                )
+            )
+        elif stype == "anneal":
+            typed.append(
+                AnnealStepConfig(
+                    total_t_s=to_float(step.get("total_t_s", 0.0), "total_t_s", context),
+                    dt_s=to_float(required(step, "dt_s", context), "dt_s", context),
+                )
+            )
+        elif stype == "analyze":
+            typed.append(AnalyzeStepConfig(silicon_only=bool(step.get("silicon_only", False))))
+        elif stype == "export":
+            formats_raw = step.get("formats", ["npy"])
+            if not isinstance(formats_raw, list) or not formats_raw:
+                raise ValueError(f"{context}.formats must be a non-empty list.")
+            typed.append(
+                ExportStepConfig(
+                    outdir=str(step.get("outdir", "outputs/run")),
+                    formats=[str(fmt).lower() for fmt in formats_raw],
+                )
+            )
+        else:
+            raise ValueError(
+                f"steps[{idx}].type '{stype}' is not supported. "
+                "Use one of: mask, oxidation, implant, anneal, analyze, export."
+            )
+    return typed

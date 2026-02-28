@@ -117,3 +117,39 @@ def save_metrics_artifacts(
     if save_csv:
         written.append(save_metrics_csv(report, outdir, filename="metrics.csv"))
     return written
+
+
+def run_metrics_analysis(
+    *,
+    C: np.ndarray,
+    grid: Grid2D,
+    silicon_only: bool,
+    materials: np.ndarray | None,
+    junction_specs: list[dict[str, float]],
+    lateral_specs: list[dict[str, float]],
+    iso_area_threshold_cm3: float | None,
+    outdir: str | Path,
+    save_json: bool,
+    save_csv: bool,
+    save_sheet_csv: bool,
+) -> AnalyzeArtifacts:
+    """Run metrics analysis and persist requested artifacts."""
+    report, C_eval = build_metrics_report(
+        C=C,
+        grid=grid,
+        silicon_only=silicon_only,
+        materials=materials,
+        junction_specs=junction_specs,
+        lateral_specs=lateral_specs,
+        iso_area_threshold_cm3=iso_area_threshold_cm3,
+    )
+    written = save_metrics_artifacts(
+        report=report,
+        C_eval=C_eval,
+        grid=grid,
+        outdir=outdir,
+        save_json=save_json,
+        save_csv=save_csv,
+        save_sheet_csv=save_sheet_csv,
+    )
+    return AnalyzeArtifacts(report=report, written=written)

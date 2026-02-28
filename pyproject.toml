@@ -16,7 +16,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = [
+  "pytest>=7.0",
+  "mypy>=1.10",
+  "types-PyYAML>=6.0.12",
+]
 gui = ["streamlit>=1.35"]
 
 [project.scripts]
@@ -28,4 +32,33 @@ include = ["proc2d*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --strict-markers"
+markers = [
+  "unit: fast isolated unit tests",
+  "integration: cross-module integration tests",
+  "adapter: CLI/GUI adapter tests",
+  "slow: slow-running tests",
+]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+  "proc2d/config",
+  "proc2d/pipeline",
+  "proc2d/services",
+  "proc2d/analysis",
+  "proc2d/app",
+  "proc2d/cli.py",
+  "proc2d/deck.py",
+  "proc2d/gui_app.py",
+]
+pretty = true
+show_error_codes = true
+warn_unused_configs = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["streamlit", "streamlit.*"]
+ignore_missing_imports = true

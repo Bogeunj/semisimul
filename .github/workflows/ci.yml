@@ -5,7 +5,27 @@ on:
   pull_request:
 
 jobs:
-  test:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package (dev)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run mypy
+        run: |
+          mypy
+
+  test-core:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -25,6 +45,29 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
-      - name: Run tests
+      - name: Run core tests
         run: |
-          pytest -q
+          pytest -m "not integration and not adapter and not slow"
+
+  test-full:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: test-core
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package (dev+gui)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,gui]"
+
+      - name: Run full tests
+        run: |
+          pytest
