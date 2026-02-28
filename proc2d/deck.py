@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import yaml
 
+from .config import parse_domain_config, parse_steps
 from .diffusion import anneal_implicit, anneal_implicit_with_history, parse_top_bc_config
 from .grid import Grid2D
 from .implant import implant_2d_gaussian
@@ -23,6 +24,7 @@ from .io import (
 from .mask import build_mask_1d, full_open_mask, openings_from_any, smooth_mask_1d, validate_mask
 from .metrics import iso_contour_area, junction_depth, lateral_extents_at_y, peak_info, sheet_dose_vs_x, total_mass
 from .oxidation import apply_oxidation, build_material_map
+from .services import UnsupportedStepTypeError, build_simulation_service
 from .units import ensure_positive
 
 KB_EV_K = 8.617333262145e-5
@@ -74,13 +76,6 @@ def _to_float(value: Any, key: str, context: str) -> float:
         return float(value)
     except Exception as exc:
         raise DeckError(f"{context}.{key} must be a number, got {value!r}.") from exc
-
-
-def _to_int(value: Any, key: str, context: str) -> int:
-    try:
-        return int(value)
-    except Exception as exc:
-        raise DeckError(f"{context}.{key} must be an integer, got {value!r}.") from exc
 
 
 def load_deck(deck_path: str | Path) -> dict[str, Any]:
@@ -151,24 +146,14 @@ def _build_initial_state(
     steps: list[dict[str, Any]],
     out_override: str | Path | None,
 ) -> SimulationState:
-    domain = _as_mapping(_required(deck, "domain", "deck"), "deck.domain")
+    try:
+        domain = parse_domain_config(deck)
+    except (TypeError, ValueError) as exc:
+        raise DeckError(str(exc)) from exc
 
-    Lx_um = _to_float(_required(domain, "Lx_um", "deck.domain"), "Lx_um", "deck.domain")
-    Ly_um = _to_float(_required(domain, "Ly_um", "deck.domain"), "Ly_um", "deck.domain")
-    Nx = _to_int(_required(domain, "Nx", "deck.domain"), "Nx", "deck.domain")
-    Ny = _to_int(_required(domain, "Ny", "deck.domain"), "Ny", "deck.domain")
-
-    if "background_doping_cm3" in deck:
-        background_raw = deck["background_doping_cm3"]
-        background_ctx = "deck"
-    else:
-        background_raw = domain.get("background_doping_cm3", 0.0)
-        background_ctx = "deck.domain"
-    background = _to_float(background_raw, "background_doping_cm3", background_ctx)
-
-    ensure_positive("background_doping_cm3", background, allow_zero=True)
-    grid = Grid2D.from_domain(Lx_um=Lx_um, Ly_um=Ly_um, Nx=Nx, Ny=Ny)
-    C0 = np.full(grid.shape, background, dtype=float)
+    ensure_positive("background_doping_cm3", domain.background_doping_cm3, allow_zero=True)
+    grid = Grid2D.from_domain(Lx_um=domain.Lx_um, Ly_um=domain.Ly_um, Nx=domain.Nx, Ny=domain.Ny)
+    C0 = np.full(grid.shape, domain.background_doping_cm3, dtype=float)
 
     state = SimulationState(
         deck_path=deck_path,
@@ -542,46 +527,63 @@ def _run_export_step(state: SimulationState, step: dict[str, Any], idx: int) -> 
     state.exports.extend(written)
 
 
-def run_deck(deck_path: str | Path, out_override: str | Path | None = None) -> SimulationState:
-    """Run all process steps from a YAML deck."""
-    deck_path = Path(deck_path).resolve()
-    deck = load_deck(deck_path)
+def _build_default_simulation_service():
+    return build_simulation_service(
+        {
+            "mask": _run_mask_step,
+            "oxidation": _run_oxidation_step,
+            "implant": _run_implant_step,
+            "anneal": _run_anneal_step,
+            "analyze": _run_analyze_step,
+            "export": _run_export_step,
+        }
+    )
 
-    raw_steps = _required(deck, "steps", "deck")
-    if not isinstance(raw_steps, list) or not raw_steps:
-        raise DeckError("deck.steps must be a non-empty list.")
 
-    steps: list[dict[str, Any]] = []
-    for idx, raw in enumerate(raw_steps):
-        steps.append(_as_mapping(raw, f"steps[{idx}]"))
+def run_simulation_payload(
+    deck: dict[str, Any],
+    *,
+    deck_path: str | Path | None = None,
+    out_override: str | Path | None = None,
+) -> SimulationState:
+    """Run simulation from an in-memory deck payload."""
+    path = Path("__in_memory_deck__.yaml") if deck_path is None else Path(deck_path)
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
 
-    state = _build_initial_state(deck, deck_path, steps=steps, out_override=out_override)
+    if not isinstance(deck, dict):
+        raise DeckError("deck must be a mapping.")
+
+    try:
+        steps = parse_steps(deck)
+    except (TypeError, ValueError) as exc:
+        raise DeckError(str(exc)) from exc
+
+    state = _build_initial_state(deck, path, steps=steps, out_override=out_override)
+    service = _build_default_simulation_service()
 
     for idx, step in enumerate(steps):
         stype = str(_required(step, "type", f"steps[{idx}]"))
         stype_l = stype.lower()
 
         try:
-            if stype_l == "mask":
-                _run_mask_step(state, step, idx)
-            elif stype_l == "oxidation":
-                _run_oxidation_step(state, step, idx)
-            elif stype_l == "implant":
-                _run_implant_step(state, step, idx)
-            elif stype_l == "anneal":
-                _run_anneal_step(state, step, idx)
-            elif stype_l == "analyze":
-                _run_analyze_step(state, step, idx)
-            elif stype_l == "export":
-                _run_export_step(state, step, idx)
-            else:
-                raise DeckError(
-                    f"steps[{idx}].type '{stype_l}' is not supported. "
-                    "Use one of: mask, oxidation, implant, anneal, analyze, export."
-                )
+            service.run_step(state=state, step_type=stype_l, step=step, idx=idx)
+        except UnsupportedStepTypeError:
+            supported = ", ".join(service.registry.supported_types())
+            raise DeckError(
+                f"steps[{idx}].type '{stype_l}' is not supported. "
+                f"Use one of: {supported}."
+            )
         except DeckError:
             raise
         except Exception as exc:
             raise DeckError(f"Step {idx} ('{stype_l}') failed: {exc}") from exc
 
     return state
+
+
+def run_deck(deck_path: str | Path, out_override: str | Path | None = None) -> SimulationState:
+    """Run all process steps from a YAML deck."""
+    deck_path = Path(deck_path).resolve()
+    deck = load_deck(deck_path)
+    return run_simulation_payload(deck, deck_path=deck_path, out_override=out_override)

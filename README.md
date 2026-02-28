@@ -11,7 +11,7 @@
 - anneal diffusivity: 상수 `D_cm2_s` 또는 Arrhenius(+schedule)
 - mixed top BC (open: Robin/Neumann/Dirichlet, blocked: Neumann)
 - oxide barrier: `oxide.D_scale`, `cap_eps_um`로 top open gate 제어
-- deck step 파이프라인: `mask -> oxidation(optional) -> implant -> anneal -> analyze -> export`
+- deck step 파이프라인(권장 순서): `mask -> oxidation(optional) -> implant -> anneal -> analyze -> export`
 - 출력: `npy`, `csv`, `png`, `vtk(ParaView)`, `tox_vs_x.(csv/png)`, `material.vtk`
 - GUI(Streamlit): 파라미터 조정/실행/맵/라인컷/metrics/history/compare/다운로드
 
@@ -67,6 +67,16 @@ GUI:
 ```bash
 python3 -m streamlit run proc2d/gui_script.py --server.port 8502
 ```
+
+---
+
+## 모듈 구조 (리팩터링 반영)
+
+- 공통 실행 엔진: `proc2d/deck.py`의 step 핸들러를 `proc2d/services/simulation_service.py` + `proc2d/pipeline/registry.py`로 실행
+- 단일 파이프라인 재사용: CLI(`run_deck`)와 GUI(`run_simulation`)가 동일한 deck payload 기반 서비스 실행 경로 사용
+- GUI 분할: `proc2d/app/gui/forms.py`, `proc2d/app/gui/tabs.py`, `proc2d/app/gui/compare.py`, `proc2d/app/gui/session.py`
+- 설정 모델: `proc2d/config/gui_models.py`, `proc2d/config/deck_models.py`, `proc2d/config/parser.py`
+- 출력 모듈 분리: `proc2d/export/*` (writer/manager), `proc2d/io.py`는 하위호환 facade
 
 ---
 
@@ -292,6 +302,7 @@ python3 -m pytest
 - anneal history 기록
 - Deal-Grove oxidation / surface shift / implant depth shift
 - Arrhenius 온도 증가 시 D 증가 경향
+- deck/GUI 공통 서비스 parity + artifact manifest 회귀
 
 ---
 
