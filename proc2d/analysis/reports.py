@@ -10,7 +10,14 @@ import numpy as np
 
 from ..domain.grid import Grid2D
 from ..io import save_metrics_csv, save_metrics_json, save_sheet_dose_vs_x_csv
-from .metrics import iso_contour_area, junction_depth, lateral_extents_at_y, peak_info, sheet_dose_vs_x, total_mass
+from .metrics import (
+    iso_contour_area,
+    junction_depth,
+    lateral_extents_at_y,
+    peak_info,
+    sheet_dose_vs_x,
+    total_mass,
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +53,7 @@ def build_metrics_report(
     junction_specs: list[dict[str, float]],
     lateral_specs: list[dict[str, float]],
     iso_area_threshold_cm3: float | None,
+    iso_area_method: str,
 ) -> tuple[dict[str, Any], np.ndarray]:
     """Build metrics report dictionary from validated analysis specs."""
     C_eval = _silicon_eval_field(C, materials, silicon_only=silicon_only)
@@ -86,7 +94,16 @@ def build_metrics_report(
         report["laterals"] = lateral_results
 
     if iso_area_threshold_cm3 is not None:
-        report["iso_area_um2"] = float(iso_contour_area(C_eval, grid, float(iso_area_threshold_cm3)))
+        method_l = str(iso_area_method).lower()
+        report["iso_area_um2"] = float(
+            iso_contour_area(
+                C_eval,
+                grid,
+                float(iso_area_threshold_cm3),
+                method=method_l,
+            )
+        )
+        report["iso_area_method"] = method_l
 
     return report, C_eval
 
@@ -105,7 +122,11 @@ def save_metrics_artifacts(
     written: list[Path] = []
     if save_sheet_csv:
         sd = sheet_dose_vs_x(C_eval, grid)
-        written.append(save_sheet_dose_vs_x_csv(grid.x_um, sd, outdir, filename="sheet_dose_vs_x.csv"))
+        written.append(
+            save_sheet_dose_vs_x_csv(
+                grid.x_um, sd, outdir, filename="sheet_dose_vs_x.csv"
+            )
+        )
         report["sheet_dose_summary"] = {
             "min_cm2": float(np.min(sd)),
             "max_cm2": float(np.max(sd)),
@@ -128,6 +149,7 @@ def run_metrics_analysis(
     junction_specs: list[dict[str, float]],
     lateral_specs: list[dict[str, float]],
     iso_area_threshold_cm3: float | None,
+    iso_area_method: str,
     outdir: str | Path,
     save_json: bool,
     save_csv: bool,
@@ -142,6 +164,7 @@ def run_metrics_analysis(
         junction_specs=junction_specs,
         lateral_specs=lateral_specs,
         iso_area_threshold_cm3=iso_area_threshold_cm3,
+        iso_area_method=iso_area_method,
     )
     written = save_metrics_artifacts(
         report=report,

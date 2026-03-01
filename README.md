@@ -309,12 +309,26 @@ python3 -m proc2d run examples/deck_oxidation_implant_anneal.yaml --out outputs/
 ## 테스트
 
 ```bash
-python3 -m pytest
+make test
 ```
 
-계층 실행 예시:
+추가 실행 옵션:
 
 ```bash
+make test-fast
+make test-all
+```
+
+- `make test`: 기본 코어 테스트 세트(`not integration and not adapter and not slow`)
+- `make test-fast`: 코어 테스트를 fail-fast(`-x --maxfail=1`)로 실행
+- `make test-all`: 전체 테스트 스위트 실행
+
+`dev` 의존성(`pip install -e ".[dev,gui]"` 또는 `pip install -e ".[dev]"`)에는 `pytest-sugar`가 포함되어 있어 테스트 출력 가독성이 개선됩니다.
+
+`make`를 쓰기 어려운 환경에서는 아래처럼 `pytest`를 직접 실행할 수 있습니다.
+
+```bash
+python3 -m pytest
 python3 -m pytest -m "unit"
 python3 -m pytest -m "not integration and not adapter and not slow"
 ```

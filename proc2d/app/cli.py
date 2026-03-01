@@ -6,11 +6,14 @@ import argparse
 from pathlib import Path
 
 from ..deck import DeckError, run_deck
+from ..selfcheck import run_selfcheck
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Create CLI parser."""
-    parser = argparse.ArgumentParser(prog="proc2d", description="proc2d process simulator")
+    parser = argparse.ArgumentParser(
+        prog="proc2d", description="proc2d process simulator"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     run_p = sub.add_parser("run", help="Run a YAML process deck")
@@ -20,6 +23,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Override export output directory",
+    )
+
+    selfcheck_p = sub.add_parser(
+        "selfcheck", help="Run dependency and smoke self-check"
+    )
+    selfcheck_p.add_argument(
+        "--no-smoke",
+        action="store_true",
+        help="Run import checks only (skip smoke simulation).",
     )
 
     return parser
@@ -42,6 +54,11 @@ def main(argv: list[str] | None = None) -> int:
             for outdir in outdirs:
                 print(f"Output: {outdir}")
         return 0
+
+    if args.command == "selfcheck":
+        report = run_selfcheck(smoke=not bool(args.no_smoke))
+        print(report.to_text())
+        return 0 if report.ok else 1
 
     parser.exit(2, "Unknown command\n")
     return 2

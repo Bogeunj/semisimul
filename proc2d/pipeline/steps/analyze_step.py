@@ -19,7 +19,11 @@ def _parse_junction_specs(step: dict[str, Any], context: str) -> list[dict[str, 
     for j_idx, item in enumerate(raw_specs):
         if not isinstance(item, dict):
             raise DeckError(f"{context}.junctions[{j_idx}] must be a mapping.")
-        x_um = to_float(required(item, "x_um", f"{context}.junctions[{j_idx}]"), "x_um", f"{context}.junctions[{j_idx}]")
+        x_um = to_float(
+            required(item, "x_um", f"{context}.junctions[{j_idx}]"),
+            "x_um",
+            f"{context}.junctions[{j_idx}]",
+        )
         th = to_float(
             required(item, "threshold_cm3", f"{context}.junctions[{j_idx}]"),
             "threshold_cm3",
@@ -38,7 +42,11 @@ def _parse_lateral_specs(step: dict[str, Any], context: str) -> list[dict[str, f
     for l_idx, item in enumerate(raw_specs):
         if not isinstance(item, dict):
             raise DeckError(f"{context}.laterals[{l_idx}] must be a mapping.")
-        y_um = to_float(required(item, "y_um", f"{context}.laterals[{l_idx}]"), "y_um", f"{context}.laterals[{l_idx}]")
+        y_um = to_float(
+            required(item, "y_um", f"{context}.laterals[{l_idx}]"),
+            "y_um",
+            f"{context}.laterals[{l_idx}]",
+        )
         th = to_float(
             required(item, "threshold_cm3", f"{context}.laterals[{l_idx}]"),
             "threshold_cm3",
@@ -62,8 +70,22 @@ def run_analyze_step(state: SimulationState, step: dict[str, Any], idx: int) -> 
     lateral_specs = _parse_lateral_specs(step, context)
 
     iso_area_threshold_cm3: float | None = None
-    if "iso_area_threshold_cm3" in step:
-        iso_th = to_float(step["iso_area_threshold_cm3"], "iso_area_threshold_cm3", context)
+    iso_area_method = "cell_count"
+
+    iso_area_cfg = opt_mapping(step.get("iso_area"), f"{context}.iso_area")
+    if iso_area_cfg:
+        iso_th = to_float(
+            required(iso_area_cfg, "threshold_cm3", f"{context}.iso_area"),
+            "threshold_cm3",
+            f"{context}.iso_area",
+        )
+        ensure_positive(f"{context}.iso_area.threshold_cm3", iso_th)
+        iso_area_threshold_cm3 = float(iso_th)
+        iso_area_method = str(iso_area_cfg.get("method", "cell_count"))
+    elif "iso_area_threshold_cm3" in step:
+        iso_th = to_float(
+            step["iso_area_threshold_cm3"], "iso_area_threshold_cm3", context
+        )
         ensure_positive(f"{context}.iso_area_threshold_cm3", iso_th)
         iso_area_threshold_cm3 = float(iso_th)
 
@@ -78,6 +100,7 @@ def run_analyze_step(state: SimulationState, step: dict[str, Any], idx: int) -> 
         junction_specs=junction_specs,
         lateral_specs=lateral_specs,
         iso_area_threshold_cm3=iso_area_threshold_cm3,
+        iso_area_method=iso_area_method,
         outdir=outdir,
         save_json=bool(save_cfg.get("json", True)),
         save_csv=bool(save_cfg.get("csv", True)),

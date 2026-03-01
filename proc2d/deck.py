@@ -53,11 +53,31 @@ def run_simulation_payload(
     return service.run_payload(deck, deck_path=deck_path, out_override=out_override)
 
 
-def run_deck(deck_path: str | Path, out_override: str | Path | None = None) -> SimulationState:
+def run_deck_data(
+    deck: dict[str, Any],
+    *,
+    deck_path: str | Path | None = None,
+    out_override: str | Path | None = None,
+) -> SimulationState:
+    """Backward-compatible alias for in-memory deck execution."""
+    return run_simulation_payload(deck, deck_path=deck_path, out_override=out_override)
+
+
+def run_deck(
+    deck_path: str | Path, out_override: str | Path | None = None
+) -> SimulationState:
     """Run all process steps from a YAML deck."""
     path = Path(deck_path).resolve()
     deck = load_deck(path)
     return run_simulation_payload(deck, deck_path=path, out_override=out_override)
 
 
-__all__ = ["DeckError", "SimulationState", "_arrhenius_D", "load_deck", "run_deck", "run_simulation_payload"]
+__all__ = [
+    "DeckError",
+    "SimulationState",
+    "_arrhenius_D",
+    "load_deck",
+    "run_deck",
+    "run_deck_data",
+    "run_simulation_payload",
+]
