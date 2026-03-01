@@ -329,7 +329,7 @@ make check
 ```
 
 - 권장 TDD 루프: `make test-one ...`(RED) -> 구현 후 동일 테스트 GREEN 확인 -> `make test`
-- `make test`: 전체 테스트 스위트 실행 (머지 전 최종 게이트)
+- `make test`: `typecheck -> lint -> 전체 테스트` 실행 (머지 전 최종 게이트)
 - `make test-module_<기능>`: 기능(모듈) 단위 테스트 실행
 - `make test-integration_<기능>`: 통합 테스트 실행
 - `make help`: 사용 가능한 타깃 요약
@@ -340,7 +340,7 @@ make check
 - `make typecheck`: `python3 -m mypy`
 - `make lint`: `python3 -m ruff check proc2d tests`
 - `make test-cov`: `pytest --cov=proc2d --cov-report=term-missing --cov-report=xml`
-- `make check`: `typecheck -> lint -> test` 순서 일괄 실행
+- `make check`: `make test`와 동일한 별칭
 
 `dev` 의존성(`pip install -e ".[dev,gui]"` 또는 `pip install -e ".[dev]"`)에는 `pytest-sugar`가 포함되어 있어 테스트 출력 가독성이 개선됩니다.
 

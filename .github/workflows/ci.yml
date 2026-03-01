@@ -87,10 +87,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,gui]"
 
-      - name: Run full tests via make test
+      - name: Run full tests via make test-suite
         run: |
           mkdir -p artifacts
-          make test PYTEST_EXTRA_OPTS="--junitxml artifacts/pytest-${{ matrix.python-version }}.xml"
+          make test-suite PYTEST_EXTRA_OPTS="--junitxml artifacts/pytest-${{ matrix.python-version }}.xml"
 
       - name: Upload test report
         uses: actions/upload-artifact@v4

@@ -24,21 +24,40 @@ INTEGRATION_history := tests/test_history.py
 	test-module_config test-module_adapters test-module_app_bridge test-module_pipeline \
 	test-module_diffusion test-module_oxidation test-module_metrics test-module_export test-module_quality \
 	test-integration_all test-integration_pipeline test-integration_oxidation test-integration_gui test-integration_history \
-	test-one test-k typecheck lint test-cov check refactor-check
+	test-one test-k typecheck lint test-cov test-suite check refactor-check
 
 help:
 	@printf "프로젝트 테스트 타깃 (GNU make 기본 도움말은 'make --help')\n"
-	@printf "  make test                      전체 테스트 실행 (최종 게이트)\n"
+	@printf "  make help                      이 도움말 출력\n"
+	@printf "  make test                      typecheck + lint + 전체 테스트 (최종 게이트)\n"
+	@printf "  make test-all                  make test 별칭\n"
 	@printf "  make test-fast                 전체 테스트 fail-fast 실행\n"
-	@printf "  make test-module_<기능>        기능(모듈) 단위 테스트 실행\n"
-	@printf "  make test-integration_<기능>   통합 테스트 실행\n"
+	@printf "  make test-suite                전체 테스트만 실행(pytest tests)\n"
+	@printf "\n"
+	@printf "  make test-module_config        설정 파서/검증 테스트\n"
+	@printf "  make test-module_adapters      CLI/GUI adapter 테스트\n"
+	@printf "  make test-module_app_bridge    engine-gui bridge/서비스 parity 테스트\n"
+	@printf "  make test-module_pipeline      pipeline 실행/오류 처리 테스트\n"
+	@printf "  make test-module_diffusion     확산/질량보존/대칭/cap 모델 테스트\n"
+	@printf "  make test-module_oxidation     산화(Deal-Grove/P2/cap deck) 테스트\n"
+	@printf "  make test-module_metrics       metrics/iso-area/analyze 테스트\n"
+	@printf "  make test-module_export        export/vtk/history 테스트\n"
+	@printf "  make test-module_quality       marker 정책/selfcheck 테스트\n"
+	@printf "\n"
+	@printf "  make test-integration_all      integration 마커 전체 테스트\n"
+	@printf "  make test-integration_pipeline pipeline 통합 테스트\n"
+	@printf "  make test-integration_oxidation oxidation 통합 테스트\n"
+	@printf "  make test-integration_gui      gui/engine/service 통합 테스트\n"
+	@printf "  make test-integration_history  history 기록 통합 테스트\n"
+	@printf "\n"
 	@printf "  make test-one TEST=...         단일 테스트 node id 실행\n"
 	@printf "  make test-k K=...              -k 필터 실행\n"
 	@printf "  make typecheck                 mypy 실행\n"
 	@printf "  make lint                      ruff 실행\n"
 	@printf "  make test-cov                  커버리지 포함 전체 테스트\n"
-	@printf "  make check                     lint + typecheck + test\n"
-	@printf "  make help-tests                기능 타깃별 포함 테스트 파일 목록\n"
+	@printf "  make check                     make test와 동일(별칭)\n"
+	@printf "  make refactor-check            make test 별칭(하위호환)\n"
+	@printf "  make help-tests                타깃별 포함 테스트 파일 목록(상세)\n"
 
 help-tests:
 	@printf "기능별 모듈 타깃:\n"
@@ -60,12 +79,15 @@ help-tests:
 	@printf "  test-integration_history -> $(INTEGRATION_history)\n"
 
 test:
-	$(PYTEST) $(PYTEST_PRETTY_OPTS) $(PYTEST_EXTRA_OPTS) tests
+	$(MAKE) check
 
 test-all: test
 
 test-fast:
 	$(PYTEST) $(PYTEST_PRETTY_OPTS) $(PYTEST_EXTRA_OPTS) tests -x --maxfail=1
+
+test-suite:
+	$(PYTEST) $(PYTEST_PRETTY_OPTS) $(PYTEST_EXTRA_OPTS) tests
 
 test-module_config:
 	$(PYTEST) $(PYTEST_PRETTY_OPTS) $(PYTEST_EXTRA_OPTS) $(MODULE_config)
@@ -126,6 +148,6 @@ lint:
 test-cov:
 	$(PYTEST) $(PYTEST_EXTRA_OPTS) tests --cov=proc2d --cov-report=term-missing --cov-report=xml
 
-check: typecheck lint test
+check: typecheck lint test-suite
 
-refactor-check: check
+refactor-check: test

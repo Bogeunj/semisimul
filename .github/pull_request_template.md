@@ -11,10 +11,8 @@
 - [ ] AI 가드레일을 확인했다. (변경 근거, 실패 원인 가설, 검증 결과를 기록)
 
 ## 필수 명령 체크
-- [ ] `make test`
+- [ ] `make test` (`typecheck + lint + 전체 테스트`)
 - [ ] 필요 시 `make test-module_<기능>` 또는 `make test-integration_<기능>`
-- [ ] `python3 -m mypy` 또는 `make typecheck`
-- [ ] `python3 -m ruff check proc2d tests` 또는 `make lint`
 
 ## RED 증거
 ```text
