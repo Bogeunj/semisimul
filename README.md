@@ -310,6 +310,7 @@ python3 -m proc2d run examples/deck_oxidation_implant_anneal.yaml --out outputs/
 
 ```bash
 make test
+make test-suite
 make test-module_oxidation
 make test-integration_gui
 make help
@@ -319,17 +320,22 @@ make help-tests
 추가 실행 옵션:
 
 ```bash
+make test-all
 make test-fast
+make test-suite
 make test-one TEST=tests/path/to/test_file.py::test_name
 make test-k K=metrics
 make typecheck
 make lint
 make test-cov
 make check
+make refactor-check
 ```
 
 - 권장 TDD 루프: `make test-one ...`(RED) -> 구현 후 동일 테스트 GREEN 확인 -> `make test`
 - `make test`: `typecheck -> lint -> 전체 테스트` 실행 (머지 전 최종 게이트)
+- `make test-suite`: 전체 테스트만 실행 (`pytest tests`)
+- `make test-all`: `make test` 별칭
 - `make test-module_<기능>`: 기능(모듈) 단위 테스트 실행
 - `make test-integration_<기능>`: 통합 테스트 실행
 - `make help`: 사용 가능한 타깃 요약
@@ -341,6 +347,15 @@ make check
 - `make lint`: `python3 -m ruff check proc2d tests`
 - `make test-cov`: `pytest --cov=proc2d --cov-report=term-missing --cov-report=xml`
 - `make check`: `make test`와 동일한 별칭
+- `make refactor-check`: `make test` 별칭(하위호환)
+
+현재 제공되는 기능 타깃(요약):
+
+- `test-module_config`, `test-module_adapters`, `test-module_app_bridge`, `test-module_pipeline`
+- `test-module_diffusion`, `test-module_oxidation`, `test-module_metrics`, `test-module_export`, `test-module_quality`
+- `test-integration_all`, `test-integration_pipeline`, `test-integration_oxidation`, `test-integration_gui`, `test-integration_history`
+
+최종 머지 전 검증은 `make test` 1회로 충분합니다.
 
 `dev` 의존성(`pip install -e ".[dev,gui]"` 또는 `pip install -e ".[dev]"`)에는 `pytest-sugar`가 포함되어 있어 테스트 출력 가독성이 개선됩니다.
 
