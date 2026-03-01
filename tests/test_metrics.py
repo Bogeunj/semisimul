@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from proc2d.grid import Grid2D
 from proc2d.metrics import (
@@ -13,6 +14,9 @@ from proc2d.metrics import (
     sheet_dose_vs_x,
     total_mass,
 )
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_metrics_basic_values() -> None:

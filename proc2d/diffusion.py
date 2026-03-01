@@ -51,8 +51,7 @@ def parse_top_bc_config(top_bc: dict | None) -> TopBCConfig:
 
     if blocked_type != "neumann":
         raise ValueError(
-            "MVP/P2 supports only top_bc.blocked.type='neumann'. "
-            f"Got '{blocked_type}'."
+            f"MVP/P2 supports only top_bc.blocked.type='neumann'. Got '{blocked_type}'."
         )
 
     if open_type == "robin":
@@ -222,7 +221,9 @@ def assemble_diffusion_operator(
                 elif top_bc.open_type == "neumann":
                     pass
                 else:
-                    raise ValueError(f"Unsupported top open BC type: {top_bc.open_type}")
+                    raise ValueError(
+                        f"Unsupported top open BC type: {top_bc.open_type}"
+                    )
 
             if j < ny - 1:
                 D_s = _harmonic_mean(Dp, float(D[j + 1, i]))
@@ -255,8 +256,8 @@ def implicit_step(
     ensure_positive("dt_s", float(dt_s))
 
     n = C.size
-    I = sparse.identity(n, format="csc", dtype=float)
-    lhs = I - float(dt_s) * A.tocsc()
+    identity_mat = sparse.identity(n, format="csc", dtype=float)
+    lhs = identity_mat - float(dt_s) * A.tocsc()
     rhs = C.reshape(-1) + float(dt_s) * b
     Cn1 = spsolve(lhs, rhs)
     return Cn1.reshape(C.shape)
@@ -313,7 +314,13 @@ def anneal_implicit_with_history(
     history: list[dict[str, float]] = []
     is_robin = top_bc is not None and top_bc.open_type == "robin"
 
-    def _row(time_s: float, mass: float, peak_cm3: float, flux_out_val: float, residual: float) -> dict[str, float]:
+    def _row(
+        time_s: float,
+        mass: float,
+        peak_cm3: float,
+        flux_out_val: float,
+        residual: float,
+    ) -> dict[str, float]:
         return {
             "time_s": float(time_s),
             "mass": float(mass),
@@ -325,13 +332,17 @@ def anneal_implicit_with_history(
     t = 0.0
     mass_prev_step = total_amount(C, grid)
     if record_enable:
-        flux0 = top_flux_out(C, grid, top_bc=top_bc, mask_eff=mask_eff) if is_robin else 0.0
+        flux0 = (
+            top_flux_out(C, grid, top_bc=top_bc, mask_eff=mask_eff) if is_robin else 0.0
+        )
         history.append(_row(0.0, mass_prev_step, float(np.max(C)), flux0, np.nan))
 
     if total_t_s == 0.0:
         return C.copy(), history
 
-    A, b = assemble_diffusion_operator(grid=grid, D_cm2_s=D_cm2_s, top_bc=top_bc, mask_eff=mask_eff)
+    A, b = assemble_diffusion_operator(
+        grid=grid, D_cm2_s=D_cm2_s, top_bc=top_bc, mask_eff=mask_eff
+    )
 
     n_full = int(np.floor(float(total_t_s) / float(dt_s) + 1.0e-12))
     rem = float(total_t_s - n_full * dt_s)
@@ -339,11 +350,11 @@ def anneal_implicit_with_history(
 
     Cflat = C.reshape(-1)
     A_csc = A.tocsc()
-    I = sparse.identity(n, format="csc", dtype=float)
+    identity_mat = sparse.identity(n, format="csc", dtype=float)
 
     lu = None
     if n_full > 0:
-        lhs = I - float(dt_s) * A_csc
+        lhs = identity_mat - float(dt_s) * A_csc
         lu = splu(lhs)
 
     next_record_t = float(record_every_s)
@@ -352,13 +363,23 @@ def anneal_implicit_with_history(
         nonlocal next_record_t
         if not record_enable:
             return
-        should_record = (t + 1e-12 >= next_record_t) or (abs(t - float(total_t_s)) <= 1e-12)
+        should_record = (t + 1e-12 >= next_record_t) or (
+            abs(t - float(total_t_s)) <= 1e-12
+        )
         if not should_record:
             return
 
         C_view = np.asarray(Cflat, dtype=float).reshape(grid.shape)
-        flux_now = top_flux_out(C_view, grid, top_bc=top_bc, mask_eff=mask_eff) if is_robin else 0.0
-        residual_now = ((mass_now - mass_prev_step) / float(dt_now) + flux_now) if is_robin else np.nan
+        flux_now = (
+            top_flux_out(C_view, grid, top_bc=top_bc, mask_eff=mask_eff)
+            if is_robin
+            else 0.0
+        )
+        residual_now = (
+            ((mass_now - mass_prev_step) / float(dt_now) + flux_now)
+            if is_robin
+            else np.nan
+        )
         history.append(_row(t, mass_now, float(np.max(C_view)), flux_now, residual_now))
         while next_record_t <= t + 1e-12:
             next_record_t += float(record_every_s)
@@ -375,7 +396,7 @@ def anneal_implicit_with_history(
             mass_prev_step = mass_now
 
     if rem > 1e-15:
-        lhs_r = I - rem * A_csc
+        lhs_r = identity_mat - rem * A_csc
         rhs_r = Cflat + rem * b
         Cflat = spsolve(lhs_r, rhs_r)
         t += rem
@@ -384,13 +405,29 @@ def anneal_implicit_with_history(
             _record_if_needed(rem, mass_now)
             mass_prev_step = mass_now
 
-    if record_enable and (not history or abs(history[-1]["time_s"] - float(total_t_s)) > 1e-12):
+    if record_enable and (
+        not history or abs(history[-1]["time_s"] - float(total_t_s)) > 1e-12
+    ):
         C_view = np.asarray(Cflat, dtype=float).reshape(grid.shape)
         mass_now = total_amount(C_view, grid)
-        flux_now = top_flux_out(C_view, grid, top_bc=top_bc, mask_eff=mask_eff) if is_robin else 0.0
+        flux_now = (
+            top_flux_out(C_view, grid, top_bc=top_bc, mask_eff=mask_eff)
+            if is_robin
+            else 0.0
+        )
         dt_last = max(float(record_every_s), 1e-30)
-        residual_now = ((mass_now - mass_prev_step) / dt_last + flux_now) if is_robin else np.nan
-        history.append(_row(float(total_t_s), mass_now, float(np.max(C_view)), flux_now, residual_now))
+        residual_now = (
+            ((mass_now - mass_prev_step) / dt_last + flux_now) if is_robin else np.nan
+        )
+        history.append(
+            _row(
+                float(total_t_s),
+                mass_now,
+                float(np.max(C_view)),
+                flux_now,
+                residual_now,
+            )
+        )
 
     return np.asarray(Cflat, dtype=float).reshape(grid.shape), history
 

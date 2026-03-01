@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from proc2d.grid import Grid2D
 from proc2d.oxidation import apply_oxidation
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_oxidation_binary_and_time_scale_match_for_binary_mask() -> None:

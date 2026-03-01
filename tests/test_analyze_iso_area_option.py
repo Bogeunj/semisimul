@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import pytest
 import yaml
 
 from proc2d.deck import run_deck
+
+
+pytestmark = pytest.mark.integration
 
 
 def test_analyze_iso_area_tri_linear_option(tmp_path) -> None:

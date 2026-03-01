@@ -13,7 +13,9 @@ from proc2d.app.cli import main
 pytestmark = pytest.mark.adapter
 
 
-def test_cli_run_command_smoke(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_run_command_smoke(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     deck = {
         "domain": {"Lx_um": 0.5, "Ly_um": 0.2, "Nx": 21, "Ny": 11},
         "background_doping_cm3": 1.0e15,
@@ -33,3 +35,16 @@ def test_cli_run_command_smoke(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert "Done. Grid=" in captured.out
     assert "Output:" in captured.out
     assert (tmp_path / "out" / "C.npy").exists()
+
+
+def test_cli_run_returns_exit_code_2_for_deck_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "missing.yaml"
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["run", str(missing), "--out", str(tmp_path / "out")])
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "Error: Deck file not found" in captured.err

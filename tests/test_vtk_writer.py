@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from proc2d.grid import Grid2D
 from proc2d.io import save_vtk_structured_points
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_save_vtk_structured_points_smoke(tmp_path) -> None:

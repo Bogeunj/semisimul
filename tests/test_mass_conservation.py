@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from proc2d.diffusion import TopBCConfig, anneal_implicit, total_amount
 from proc2d.grid import Grid2D
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_mass_conservation_neumann_everywhere() -> None:

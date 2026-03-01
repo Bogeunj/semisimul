@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from proc2d.diffusion import TopBCConfig, anneal_implicit
 from proc2d.grid import Grid2D
 from proc2d.implant import implant_2d_gaussian
 from proc2d.mask import full_open_mask
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_full_open_uniform_bc_keeps_x_uniformity() -> None:
@@ -30,7 +34,9 @@ def test_full_open_uniform_bc_keeps_x_uniformity() -> None:
         D_cm2_s=8.0e-15,
         total_t_s=1.5,
         dt_s=0.15,
-        top_bc=TopBCConfig(open_type="robin", blocked_type="neumann", h_cm_s=2.0e-5, Ceq_cm3=0.0),
+        top_bc=TopBCConfig(
+            open_type="robin", blocked_type="neumann", h_cm_s=2.0e-5, Ceq_cm3=0.0
+        ),
         mask_eff=mask_eff,
     )
 

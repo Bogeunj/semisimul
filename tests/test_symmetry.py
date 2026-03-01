@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from proc2d.diffusion import TopBCConfig, anneal_implicit
 from proc2d.grid import Grid2D
 from proc2d.implant import implant_2d_gaussian
 from proc2d.mask import build_mask_1d, smooth_mask_1d
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_center_opening_preserves_x_symmetry() -> None:
@@ -31,7 +35,9 @@ def test_center_opening_preserves_x_symmetry() -> None:
         D_cm2_s=1.0e-14,
         total_t_s=2.0,
         dt_s=0.2,
-        top_bc=TopBCConfig(open_type="robin", blocked_type="neumann", h_cm_s=1.0e-5, Ceq_cm3=0.0),
+        top_bc=TopBCConfig(
+            open_type="robin", blocked_type="neumann", h_cm_s=1.0e-5, Ceq_cm3=0.0
+        ),
         mask_eff=mask_eff,
     )
 

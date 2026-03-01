@@ -310,27 +310,69 @@ python3 -m proc2d run examples/deck_oxidation_implant_anneal.yaml --out outputs/
 
 ```bash
 make test
+make test-module_oxidation
+make test-integration_gui
+make help
+make help-tests
 ```
 
 추가 실행 옵션:
 
 ```bash
 make test-fast
-make test-all
+make test-one TEST=tests/path/to/test_file.py::test_name
+make test-k K=metrics
+make typecheck
+make lint
+make test-cov
+make check
 ```
 
-- `make test`: 기본 코어 테스트 세트(`not integration and not adapter and not slow`)
-- `make test-fast`: 코어 테스트를 fail-fast(`-x --maxfail=1`)로 실행
-- `make test-all`: 전체 테스트 스위트 실행
+- 권장 TDD 루프: `make test-one ...`(RED) -> 구현 후 동일 테스트 GREEN 확인 -> `make test`
+- `make test`: 전체 테스트 스위트 실행 (머지 전 최종 게이트)
+- `make test-module_<기능>`: 기능(모듈) 단위 테스트 실행
+- `make test-integration_<기능>`: 통합 테스트 실행
+- `make help`: 사용 가능한 타깃 요약
+- `make help-tests`: 기능 타깃별 포함 테스트 파일 목록 출력
+- `make test-fast`: 전체 테스트 fail-fast(`-x --maxfail=1`) 실행
+- `make test-one`: 지정한 단일 테스트 node id 실행 (`TEST=<pytest nodeid>`)
+- `make test-k`: `-k` 표현식 기반 부분 실행 (`K=<expr>`)
+- `make typecheck`: `python3 -m mypy`
+- `make lint`: `python3 -m ruff check proc2d tests`
+- `make test-cov`: `pytest --cov=proc2d --cov-report=term-missing --cov-report=xml`
+- `make check`: `typecheck -> lint -> test` 순서 일괄 실행
 
 `dev` 의존성(`pip install -e ".[dev,gui]"` 또는 `pip install -e ".[dev]"`)에는 `pytest-sugar`가 포함되어 있어 테스트 출력 가독성이 개선됩니다.
+
+### AI/TDD 작업 규칙
+
+AI 보조 코딩 시 아래 규칙을 기본 원칙으로 사용합니다.
+
+- 기존 테스트의 완화/삭제는 금지하고, 재현/명세 강화를 위한 테스트 추가/강화는 허용한다.
+- 새 기능 구현 시 기존 통과 테스트를 깨뜨리지 않는다.
+- 테스트 실패는 구현을 수정해 해결한다(테스트 완화 금지).
+
+금지 패턴:
+
+- 실패 테스트를 `skip/xfail`로 우회
+- assertion 완화/삭제로 통과 유도
+- 실패 테스트 제외를 위한 마커/명령 조작
+- `except Exception: pass` 형태의 무차별 예외 삼키기
+
+버그 수정 권장 절차:
+
+1. 실패를 재현하는 테스트를 먼저 작성하고 실패를 확인한다.
+2. 구현 코드를 수정해 테스트를 통과시킨다.
+3. `make test`로 전체 회귀를 확인한다.
+
+KPI 운영/측정 기준은 `TDD_KPI.md`를 참고하세요.
 
 `make`를 쓰기 어려운 환경에서는 아래처럼 `pytest`를 직접 실행할 수 있습니다.
 
 ```bash
-python3 -m pytest
-python3 -m pytest -m "unit"
-python3 -m pytest -m "not integration and not adapter and not slow"
+python3 -m pytest tests
+python3 -m pytest tests/config/test_parser.py
+python3 -m pytest -m "integration"
 ```
 
 포함 테스트:
