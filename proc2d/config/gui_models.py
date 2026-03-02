@@ -25,7 +25,7 @@ class GuiRunConfig:
     Rp_um: float = 0.05
     dRp_um: float = 0.02
 
-    oxidation_enable: bool = False
+    oxidation_enable: bool = True
     oxidation_time_s: float = 5.0
     oxidation_A_um: float = 0.1
     oxidation_B_um2_s: float = 0.01
@@ -33,6 +33,14 @@ class GuiRunConfig:
     oxidation_apply_on: str = "all"
     oxidation_consume_dopants: bool = True
     oxidation_update_materials: bool = True
+
+    deposition_enable: bool = True
+    deposition_thickness_um: float = 0.0
+    deposition_apply_on: str = "all"
+
+    etch_enable: bool = True
+    etch_thickness_um: float = 0.0
+    etch_apply_on: str = "all"
 
     D_cm2_s: float = 1.0e-14
     total_t_s: float = 10.0
@@ -63,6 +71,14 @@ class GuiRunConfig:
     export_tox_png: bool = True
 
     compute_metrics: bool = True
+
+    electrical_enable: bool = True
+    electrical_model: str = "mosfet_long_channel"
+    electrical_Vgs_V: float = 2.5
+    electrical_Vds_V: float = 0.1
+    electrical_W_um: float = 1.0
+    electrical_L_um: float = 0.5
+
     record_history: bool = False
     history_every_s: float = 0.5
     history_save_png: bool = True
@@ -83,7 +99,9 @@ class GuiRunConfig:
         cfg.Ly_um = float(_pick("Ly_um", cfg.Ly_um))
         cfg.Nx = int(_pick("Nx", cfg.Nx))
         cfg.Ny = int(_pick("Ny", cfg.Ny))
-        cfg.background_doping_cm3 = float(_pick("background_doping_cm3", cfg.background_doping_cm3))
+        cfg.background_doping_cm3 = float(
+            _pick("background_doping_cm3", cfg.background_doping_cm3)
+        )
 
         openings = _pick("openings_um", cfg.openings_um)
         cfg.openings_um = openings_from_any(openings) if openings else []
@@ -98,7 +116,9 @@ class GuiRunConfig:
         cfg.oxidation_A_um = float(_pick("oxidation_A_um", cfg.oxidation_A_um))
         cfg.oxidation_B_um2_s = float(_pick("oxidation_B_um2_s", cfg.oxidation_B_um2_s))
         cfg.oxidation_gamma = float(_pick("oxidation_gamma", cfg.oxidation_gamma))
-        cfg.oxidation_apply_on = str(_pick("oxidation_apply_on", cfg.oxidation_apply_on))
+        cfg.oxidation_apply_on = str(
+            _pick("oxidation_apply_on", cfg.oxidation_apply_on)
+        )
         cfg.oxidation_consume_dopants = bool(
             _pick("oxidation_consume_dopants", cfg.oxidation_consume_dopants)
         )
@@ -106,11 +126,27 @@ class GuiRunConfig:
             _pick("oxidation_update_materials", cfg.oxidation_update_materials)
         )
 
+        cfg.deposition_enable = bool(_pick("deposition_enable", cfg.deposition_enable))
+        cfg.deposition_thickness_um = float(
+            _pick("deposition_thickness_um", cfg.deposition_thickness_um)
+        )
+        cfg.deposition_apply_on = str(
+            _pick("deposition_apply_on", cfg.deposition_apply_on)
+        )
+
+        cfg.etch_enable = bool(_pick("etch_enable", cfg.etch_enable))
+        cfg.etch_thickness_um = float(_pick("etch_thickness_um", cfg.etch_thickness_um))
+        cfg.etch_apply_on = str(_pick("etch_apply_on", cfg.etch_apply_on))
+
         cfg.D_cm2_s = float(_pick("D_cm2_s", cfg.D_cm2_s))
         cfg.total_t_s = float(_pick("total_t_s", cfg.total_t_s))
         cfg.dt_s = float(_pick("dt_s", cfg.dt_s))
-        cfg.anneal_use_arrhenius = bool(_pick("anneal_use_arrhenius", cfg.anneal_use_arrhenius))
-        cfg.arrhenius_D0_cm2_s = float(_pick("arrhenius_D0_cm2_s", cfg.arrhenius_D0_cm2_s))
+        cfg.anneal_use_arrhenius = bool(
+            _pick("anneal_use_arrhenius", cfg.anneal_use_arrhenius)
+        )
+        cfg.arrhenius_D0_cm2_s = float(
+            _pick("arrhenius_D0_cm2_s", cfg.arrhenius_D0_cm2_s)
+        )
         cfg.arrhenius_Ea_eV = float(_pick("arrhenius_Ea_eV", cfg.arrhenius_Ea_eV))
         cfg.arrhenius_T_C = float(_pick("arrhenius_T_C", cfg.arrhenius_T_C))
 
@@ -124,7 +160,9 @@ class GuiRunConfig:
                     continue
                 if "t_s" not in seg or "T_C" not in seg:
                     continue
-                cfg.arrhenius_schedule.append({"t_s": float(seg["t_s"]), "T_C": float(seg["T_C"])})
+                cfg.arrhenius_schedule.append(
+                    {"t_s": float(seg["t_s"]), "T_C": float(seg["T_C"])}
+                )
 
         cfg.oxide_D_scale = float(_pick("oxide_D_scale", cfg.oxide_D_scale))
         cfg.cap_eps_um = float(_pick("cap_eps_um", cfg.cap_eps_um))
@@ -132,7 +170,9 @@ class GuiRunConfig:
         cfg.top_open_type = str(_pick("top_open_type", cfg.top_open_type))
         cfg.h_cm_s = float(_pick("h_cm_s", cfg.h_cm_s))
         cfg.Ceq_cm3 = float(_pick("Ceq_cm3", cfg.Ceq_cm3))
-        cfg.dirichlet_value_cm3 = float(_pick("dirichlet_value_cm3", cfg.dirichlet_value_cm3))
+        cfg.dirichlet_value_cm3 = float(
+            _pick("dirichlet_value_cm3", cfg.dirichlet_value_cm3)
+        )
 
         cfg.outdir = str(_pick("outdir", cfg.outdir))
         formats = _pick("formats", cfg.formats)
@@ -147,6 +187,14 @@ class GuiRunConfig:
         cfg.export_tox_png = bool(_pick("export_tox_png", cfg.export_tox_png))
 
         cfg.compute_metrics = bool(_pick("compute_metrics", cfg.compute_metrics))
+
+        cfg.electrical_enable = bool(_pick("electrical_enable", cfg.electrical_enable))
+        cfg.electrical_model = str(_pick("electrical_model", cfg.electrical_model))
+        cfg.electrical_Vgs_V = float(_pick("electrical_Vgs_V", cfg.electrical_Vgs_V))
+        cfg.electrical_Vds_V = float(_pick("electrical_Vds_V", cfg.electrical_Vds_V))
+        cfg.electrical_W_um = float(_pick("electrical_W_um", cfg.electrical_W_um))
+        cfg.electrical_L_um = float(_pick("electrical_L_um", cfg.electrical_L_um))
+
         cfg.record_history = bool(_pick("record_history", cfg.record_history))
         cfg.history_every_s = float(_pick("history_every_s", cfg.history_every_s))
         cfg.history_save_png = bool(_pick("history_save_png", cfg.history_save_png))

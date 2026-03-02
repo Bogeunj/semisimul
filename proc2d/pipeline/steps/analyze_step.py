@@ -107,4 +107,6 @@ def run_analyze_step(state: SimulationState, step: dict[str, Any], idx: int) -> 
         save_sheet_csv=bool(sheet_cfg.get("save_csv", False)),
     )
     state.exports.extend(artifacts.written)
-    state.metrics = artifacts.report
+    merged = dict(state.metrics) if isinstance(state.metrics, dict) else {}
+    merged.update(artifacts.report)
+    state.metrics = merged

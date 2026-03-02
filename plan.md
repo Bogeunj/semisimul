@@ -493,3 +493,42 @@ diffusion:
 - golden metric 회귀 테스트
 - 신규 옵션 단위 테스트
 - selfcheck + CI 안정화
+
+---
+
+## 9. M5: 공정 step 확장 + 전기적 coupling (2026-03-02)
+
+- [x] M5-1: TDD RED 테스트 추가 (deposition/etch/electrical + 공정-전류 coupling)
+- [x] M5-2: deck parser/typed config/registry에 신규 step 타입 연결
+- [x] M5-3: deposition/etch 물리 step 구현 (tox/material/C 실제 갱신)
+- [x] M5-4: electrical step 구현 (공정 상태 기반 Id 계산)
+- [x] M5-5: GUI 입력 -> deck -> 엔진 경로에 신규 step 노출
+- [x] M5-6: typecheck + 테스트 회귀 통과
+
+---
+
+## 10. M6: GUI 다중 물리 map + 맵별 linecut (2026-03-02)
+
+- [x] M6-1: TDD RED 테스트 추가 (structure/potential/e-field/conductivity + 맵별 linecut 기반)
+- [x] M6-2: 물리 map 계산 모듈 구현 (potential/e-field/conductivity/structure)
+- [x] M6-3: GUI simulation adapter 결과 payload 확장 (physical_maps + 맵별 linecut 초기값)
+- [x] M6-4: GUI 탭 리팩터링 (Structure 첫 탭 + 각 map 탭 내 linecut)
+- [x] M6-5: 전체 테스트/타입체크/린트 회귀 통과
+
+---
+
+## 11. M7: GUI 기본 공정 적용 + 단위 입력 UX 개선 (2026-03-02)
+
+- [x] M7-1: TDD RED 테스트 추가 (기본 공정 step 강제 포함 + 단위 입력 파서)
+- [x] M7-2: GUI deck 빌더에서 optional 공정 step 기본 적용(항상 포함)
+- [x] M7-3: 입력 라벨 단위 표기 [unit] 통일 + 큰 수치 단위 입력 지원
+- [x] M7-4: 전체 테스트/타입체크/린트 회귀 통과
+
+---
+
+## 12. M8: GUI 저장내역 관리(삭제/이름변경/이동) + 용량 가시화 (2026-03-02)
+
+- [x] M8-1: TDD RED 테스트 추가 (storage scan/delete/rename/move + 탭 노출)
+- [x] M8-2: 저장내역 관리 서비스 구현 (안전 경로 검증 포함)
+- [x] M8-3: Web UI Storage 관리 탭 구현 (삭제/이름변경/이동/용량 표시)
+- [x] M8-4: 전체 테스트/타입체크/린트 회귀 통과

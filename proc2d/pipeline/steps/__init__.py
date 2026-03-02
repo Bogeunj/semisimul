@@ -5,6 +5,9 @@ from __future__ import annotations
 from ..step_base import StepRunner
 from .analyze_step import run_analyze_step
 from .anneal_step import arrhenius_diffusivity, run_anneal_step
+from .deposition_step import run_deposition_step
+from .electrical_step import run_electrical_step
+from .etch_step import run_etch_step
 from .export_step import run_export_step
 from .implant_step import run_implant_step
 from .mask_step import run_mask_step
@@ -20,6 +23,9 @@ def build_default_step_handlers() -> dict[str, StepRunner]:
         "anneal": run_anneal_step,
         "analyze": run_analyze_step,
         "export": run_export_step,
+        "deposition": run_deposition_step,
+        "etch": run_etch_step,
+        "electrical": run_electrical_step,
     }
 
 

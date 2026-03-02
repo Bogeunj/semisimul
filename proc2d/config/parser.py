@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Mapping, cast
+from typing import Any, Literal, Mapping, TypeAlias, cast
 
 from ..mask import openings_from_any
 from .deck_models import (
     AnalyzeStepConfig,
     AnnealStepConfig,
+    DepositionStepConfig,
+    ElectricalStepConfig,
+    EtchStepConfig,
     DomainConfig,
     ExportStepConfig,
     ImplantStepConfig,
@@ -15,7 +18,19 @@ from .deck_models import (
     OxidationStepConfig,
 )
 from .gui_models import GuiRunConfig
-from .validators import as_mapping, required, to_float, to_int
+from .validators import as_mapping, ensure_nonnegative, required, to_float, to_int
+
+StepConfig: TypeAlias = (
+    MaskStepConfig
+    | OxidationStepConfig
+    | ImplantStepConfig
+    | AnnealStepConfig
+    | AnalyzeStepConfig
+    | ExportStepConfig
+    | DepositionStepConfig
+    | EtchStepConfig
+    | ElectricalStepConfig
+)
 
 
 def parse_steps(deck: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -42,16 +57,26 @@ def parse_domain_config(deck: Mapping[str, Any]) -> DomainConfig:
     if "background_doping_cm3" in deck:
         bg = to_float(deck["background_doping_cm3"], "background_doping_cm3", "deck")
     else:
-        bg = to_float(domain.get("background_doping_cm3", 0.0), "background_doping_cm3", "deck.domain")
+        bg = to_float(
+            domain.get("background_doping_cm3", 0.0),
+            "background_doping_cm3",
+            "deck.domain",
+        )
 
-    return DomainConfig(Lx_um=Lx_um, Ly_um=Ly_um, Nx=Nx, Ny=Ny, background_doping_cm3=bg)
+    return DomainConfig(
+        Lx_um=Lx_um, Ly_um=Ly_um, Nx=Nx, Ny=Ny, background_doping_cm3=bg
+    )
 
 
 def _top_bc_from_gui(cfg: GuiRunConfig) -> dict[str, Any]:
     open_type = str(cfg.top_open_type).lower()
     if open_type == "robin":
         return {
-            "open": {"type": "robin", "h_cm_s": float(cfg.h_cm_s), "Ceq_cm3": float(cfg.Ceq_cm3)},
+            "open": {
+                "type": "robin",
+                "h_cm_s": float(cfg.h_cm_s),
+                "Ceq_cm3": float(cfg.Ceq_cm3),
+            },
             "blocked": {"type": "neumann"},
         }
     if open_type == "dirichlet":
@@ -85,20 +110,27 @@ def build_deck_from_gui_config(cfg: GuiRunConfig) -> dict[str, Any]:
             }
         )
 
-    if bool(cfg.oxidation_enable):
-        steps.append(
-            {
-                "type": "oxidation",
-                "model": "deal_grove",
-                "time_s": float(cfg.oxidation_time_s),
-                "A_um": float(cfg.oxidation_A_um),
-                "B_um2_s": float(cfg.oxidation_B_um2_s),
-                "gamma": float(cfg.oxidation_gamma),
-                "apply_on": str(cfg.oxidation_apply_on),
-                "consume_dopants": bool(cfg.oxidation_consume_dopants),
-                "update_materials": bool(cfg.oxidation_update_materials),
-            }
-        )
+    steps.append(
+        {
+            "type": "oxidation",
+            "model": "deal_grove",
+            "time_s": float(cfg.oxidation_time_s),
+            "A_um": float(cfg.oxidation_A_um),
+            "B_um2_s": float(cfg.oxidation_B_um2_s),
+            "gamma": float(cfg.oxidation_gamma),
+            "apply_on": str(cfg.oxidation_apply_on),
+            "consume_dopants": bool(cfg.oxidation_consume_dopants),
+            "update_materials": bool(cfg.oxidation_update_materials),
+        }
+    )
+
+    steps.append(
+        {
+            "type": "deposition",
+            "thickness_um": float(cfg.deposition_thickness_um),
+            "apply_on": str(cfg.deposition_apply_on),
+        }
+    )
 
     steps.append(
         {
@@ -127,7 +159,8 @@ def build_deck_from_gui_config(cfg: GuiRunConfig) -> dict[str, Any]:
         }
         if cfg.arrhenius_schedule:
             diff_cfg["schedule"] = [
-                {"t_s": float(seg["t_s"]), "T_C": float(seg["T_C"])} for seg in cfg.arrhenius_schedule
+                {"t_s": float(seg["t_s"]), "T_C": float(seg["T_C"])}
+                for seg in cfg.arrhenius_schedule
             ]
         else:
             diff_cfg["T_C"] = float(cfg.arrhenius_T_C)
@@ -143,6 +176,25 @@ def build_deck_from_gui_config(cfg: GuiRunConfig) -> dict[str, Any]:
             "save_png": bool(cfg.history_save_png),
         }
     steps.append(anneal_step)
+
+    steps.append(
+        {
+            "type": "etch",
+            "thickness_um": float(cfg.etch_thickness_um),
+            "apply_on": str(cfg.etch_apply_on),
+        }
+    )
+
+    steps.append(
+        {
+            "type": "electrical",
+            "model": str(cfg.electrical_model),
+            "Vgs_V": float(cfg.electrical_Vgs_V),
+            "Vds_V": float(cfg.electrical_Vds_V),
+            "W_um": float(cfg.electrical_W_um),
+            "L_um": float(cfg.electrical_L_um),
+        }
+    )
 
     if bool(cfg.compute_metrics):
         x_ref = float(cfg.linecut_x_um)
@@ -190,13 +242,9 @@ def build_deck_from_gui_config(cfg: GuiRunConfig) -> dict[str, Any]:
     return deck
 
 
-def parse_step_configs(deck: Mapping[str, Any]) -> list[
-    MaskStepConfig | OxidationStepConfig | ImplantStepConfig | AnnealStepConfig | AnalyzeStepConfig | ExportStepConfig
-]:
+def parse_step_configs(deck: Mapping[str, Any]) -> list[StepConfig]:
     """Parse deck steps into coarse typed step configs."""
-    typed: list[
-        MaskStepConfig | OxidationStepConfig | ImplantStepConfig | AnnealStepConfig | AnalyzeStepConfig | ExportStepConfig
-    ] = []
+    typed: list[StepConfig] = []
     for idx, step in enumerate(parse_steps(deck)):
         stype = str(required(step, "type", f"steps[{idx}]")).lower()
         context = f"steps[{idx}]"
@@ -204,22 +252,32 @@ def parse_step_configs(deck: Mapping[str, Any]) -> list[
         if stype == "mask":
             openings_raw = required(step, "openings_um", context)
             if not isinstance(openings_raw, list):
-                raise ValueError(f"{context}.openings_um must be a list of [start, end] pairs.")
+                raise ValueError(
+                    f"{context}.openings_um must be a list of [start, end] pairs."
+                )
             typed.append(
                 MaskStepConfig(
                     openings_um=openings_from_any(openings_raw),
-                    sigma_lat_um=to_float(step.get("sigma_lat_um", 0.0), "sigma_lat_um", context),
+                    sigma_lat_um=to_float(
+                        step.get("sigma_lat_um", 0.0), "sigma_lat_um", context
+                    ),
                 )
             )
         elif stype == "oxidation":
             apply_on = str(step.get("apply_on", "all"))
             if apply_on not in ("all", "open", "blocked"):
-                raise ValueError(f"{context}.apply_on must be one of: all, open, blocked.")
+                raise ValueError(
+                    f"{context}.apply_on must be one of: all, open, blocked."
+                )
             typed.append(
                 OxidationStepConfig(
-                    time_s=to_float(required(step, "time_s", context), "time_s", context),
+                    time_s=to_float(
+                        required(step, "time_s", context), "time_s", context
+                    ),
                     A_um=to_float(required(step, "A_um", context), "A_um", context),
-                    B_um2_s=to_float(required(step, "B_um2_s", context), "B_um2_s", context),
+                    B_um2_s=to_float(
+                        required(step, "B_um2_s", context), "B_um2_s", context
+                    ),
                     gamma=to_float(step.get("gamma", 2.27), "gamma", context),
                     apply_on=cast(Literal["all", "open", "blocked"], apply_on),
                     consume_dopants=bool(step.get("consume_dopants", True)),
@@ -229,20 +287,28 @@ def parse_step_configs(deck: Mapping[str, Any]) -> list[
         elif stype == "implant":
             typed.append(
                 ImplantStepConfig(
-                    dose_cm2=to_float(required(step, "dose_cm2", context), "dose_cm2", context),
+                    dose_cm2=to_float(
+                        required(step, "dose_cm2", context), "dose_cm2", context
+                    ),
                     Rp_um=to_float(required(step, "Rp_um", context), "Rp_um", context),
-                    dRp_um=to_float(required(step, "dRp_um", context), "dRp_um", context),
+                    dRp_um=to_float(
+                        required(step, "dRp_um", context), "dRp_um", context
+                    ),
                 )
             )
         elif stype == "anneal":
             typed.append(
                 AnnealStepConfig(
-                    total_t_s=to_float(step.get("total_t_s", 0.0), "total_t_s", context),
+                    total_t_s=to_float(
+                        step.get("total_t_s", 0.0), "total_t_s", context
+                    ),
                     dt_s=to_float(required(step, "dt_s", context), "dt_s", context),
                 )
             )
         elif stype == "analyze":
-            typed.append(AnalyzeStepConfig(silicon_only=bool(step.get("silicon_only", False))))
+            typed.append(
+                AnalyzeStepConfig(silicon_only=bool(step.get("silicon_only", False)))
+            )
         elif stype == "export":
             formats_raw = step.get("formats", ["npy"])
             if not isinstance(formats_raw, list) or not formats_raw:
@@ -253,9 +319,47 @@ def parse_step_configs(deck: Mapping[str, Any]) -> list[
                     formats=[str(fmt).lower() for fmt in formats_raw],
                 )
             )
+        elif stype == "deposition":
+            apply_on = str(step.get("apply_on", "all"))
+            if apply_on not in ("all", "open", "blocked"):
+                raise ValueError(
+                    f"{context}.apply_on must be one of: all, open, blocked."
+                )
+            thickness_um = ensure_nonnegative(
+                f"{context}.thickness_um",
+                to_float(
+                    required(step, "thickness_um", context), "thickness_um", context
+                ),
+            )
+            typed.append(
+                DepositionStepConfig(
+                    thickness_um=thickness_um,
+                    apply_on=cast(Literal["all", "open", "blocked"], apply_on),
+                )
+            )
+        elif stype == "etch":
+            apply_on = str(step.get("apply_on", "all"))
+            if apply_on not in ("all", "open", "blocked"):
+                raise ValueError(
+                    f"{context}.apply_on must be one of: all, open, blocked."
+                )
+            thickness_um = ensure_nonnegative(
+                f"{context}.thickness_um",
+                to_float(
+                    required(step, "thickness_um", context), "thickness_um", context
+                ),
+            )
+            typed.append(
+                EtchStepConfig(
+                    thickness_um=thickness_um,
+                    apply_on=cast(Literal["all", "open", "blocked"], apply_on),
+                )
+            )
+        elif stype == "electrical":
+            typed.append(ElectricalStepConfig())
         else:
             raise ValueError(
                 f"steps[{idx}].type '{stype}' is not supported. "
-                "Use one of: mask, oxidation, implant, anneal, analyze, export."
+                "Use one of: mask, oxidation, implant, anneal, analyze, export, deposition, etch, electrical."
             )
     return typed

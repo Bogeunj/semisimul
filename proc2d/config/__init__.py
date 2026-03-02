@@ -3,21 +3,40 @@
 from .deck_models import (
     AnalyzeStepConfig,
     AnnealStepConfig,
+    DepositionStepConfig,
     DomainConfig,
+    ElectricalStepConfig,
+    EtchStepConfig,
     ExportStepConfig,
     ImplantStepConfig,
     MaskStepConfig,
     OxidationStepConfig,
 )
 from .gui_models import GuiRunConfig
-from .parser import build_deck_from_gui_config, parse_domain_config, parse_step_configs, parse_steps
-from .validators import as_mapping, ensure_choice, ensure_nonnegative, opt_mapping, required, to_float, to_int
+from .parser import (
+    build_deck_from_gui_config,
+    parse_domain_config,
+    parse_step_configs,
+    parse_steps,
+)
+from .validators import (
+    as_mapping,
+    ensure_choice,
+    ensure_nonnegative,
+    opt_mapping,
+    required,
+    to_float,
+    to_int,
+)
 
 __all__ = [
     "DomainConfig",
     "AnalyzeStepConfig",
     "AnnealStepConfig",
+    "DepositionStepConfig",
     "ExportStepConfig",
+    "ElectricalStepConfig",
+    "EtchStepConfig",
     "GuiRunConfig",
     "ImplantStepConfig",
     "MaskStepConfig",

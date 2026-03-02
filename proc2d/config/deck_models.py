@@ -75,3 +75,28 @@ class ExportStepConfig:
     type: Literal["export"] = "export"
     outdir: str = "outputs/run"
     formats: list[str] = field(default_factory=lambda: ["npy"])
+
+
+@dataclass(frozen=True)
+class DepositionStepConfig:
+    """Typed deposition step config."""
+
+    type: Literal["deposition"] = "deposition"
+    thickness_um: float = 0.0
+    apply_on: Literal["all", "open", "blocked"] = "all"
+
+
+@dataclass(frozen=True)
+class EtchStepConfig:
+    """Typed etch step config."""
+
+    type: Literal["etch"] = "etch"
+    thickness_um: float = 0.0
+    apply_on: Literal["all", "open", "blocked"] = "all"
+
+
+@dataclass(frozen=True)
+class ElectricalStepConfig:
+    """Typed electrical step config."""
+
+    type: Literal["electrical"] = "electrical"

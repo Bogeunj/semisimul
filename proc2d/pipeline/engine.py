@@ -15,7 +15,9 @@ def _required(mapping: Mapping[str, Any], key: str, context: str) -> Any:
     return mapping[key]
 
 
-def run(steps: Iterable[Mapping[str, Any]], context: SimulationState, registry: StepRegistry) -> SimulationState:
+def run(
+    steps: Iterable[Mapping[str, Any]], context: SimulationState, registry: StepRegistry
+) -> SimulationState:
     """Run deck steps sequentially against the given context."""
     for idx, raw_step in enumerate(steps):
         if not isinstance(raw_step, Mapping):
@@ -27,7 +29,20 @@ def run(steps: Iterable[Mapping[str, Any]], context: SimulationState, registry: 
 
         runner = registry.resolve(stype_l)
         if runner is None:
-            supported = ", ".join(registry.supported_types())
+            supported_types = registry.supported_types()
+            if not supported_types:
+                supported_types = (
+                    "mask",
+                    "oxidation",
+                    "implant",
+                    "anneal",
+                    "analyze",
+                    "export",
+                    "deposition",
+                    "etch",
+                    "electrical",
+                )
+            supported = ", ".join(supported_types)
             raise DeckError(
                 f"steps[{idx}].type '{stype_l}' is not supported. "
                 f"Use one of: {supported}."
